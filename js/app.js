@@ -174,15 +174,16 @@ function linkFileList(list) {
 const entryCall = (fn) => new Promise((res, rej) => fn(res, rej));
 const subdir = (dir, path) => entryCall((ok, no) => dir.getDirectory(path, {}, ok, no)).catch(() => null);
 
-async function readTree(dir, rel, files) {
+async function listTree(dir, rel, out, onCount) {
   const reader = dir.createReader();
   for (;;) {
     const batch = await entryCall((ok, no) => reader.readEntries(ok, no));
     if (!batch.length) break;
     for (const e of batch) {
-      if (e.isDirectory) await readTree(e, rel + e.name + "/", files);
-      else files.set(rel + e.name, await entryCall((ok, no) => e.file(ok, no)));
+      if (e.isDirectory) await listTree(e, rel + e.name + "/", out, onCount);
+      else out.push([rel + e.name, e]);
     }
+    onCount(out.length);
   }
 }
 
@@ -195,15 +196,30 @@ async function linkDroppedFolder(entry) {
       setGameStatus(`“${entry.name}” doesn't contain the game's files — drop Europa Universalis V, or the game folder inside it.`);
       return;
     }
-    const files = new Map();
+    // List first (count unknown, so the bar is indeterminate), then open
+    // each file entry with a real count to show against.
+    const bar = $("gamebar");
+    setBar(bar, null);
+    const entries = [];
     for (const n of NEEDED) {
       const d = await subdir(root, n.replace(/\/$/, ""));
-      if (d) await readTree(d, n, files);
+      if (d) await listTree(d, n, entries, (k) => setGameStatus(`Finding game files… ${k.toLocaleString()}`));
     }
+    const files = new Map();
+    let i = 0;
+    for (const [rel, e] of entries) {
+      files.set(rel, await entryCall((ok, no) => e.file(ok, no)));
+      if (++i % 50 === 0 || i === entries.length) {
+        setBar(bar, i / entries.length);
+        setGameStatus(`Reading game files… ${i.toLocaleString()} of ${entries.length.toLocaleString()}`);
+      }
+    }
+    bar.hidden = true;
     game = { files, label: entry.name };
     setGameStatus(`Linked: ${entry.name}`, true);
     maybeRebuild();
   } catch (err) {
+    $("gamebar").hidden = true;
     setGameStatus(`Couldn't read “${entry.name}”: ${err.message || err.name}. Try the folder link below.`);
   }
 }
@@ -227,6 +243,13 @@ function forgetGame() {
 // Running a build
 // ==========================================================================
 let worker = null, timer = null, current = null, lastSave = null;
+
+/* value in 0..1, or null for an indeterminate bar */
+function setBar(bar, value) {
+  bar.hidden = false;
+  if (value == null) bar.removeAttribute("value");
+  else bar.value = Math.max(0, Math.min(1, value));
+}
 
 function showStatus(text, state) {
   $("status").hidden = false;
@@ -262,6 +285,7 @@ function build(save) {
   $("log").textContent = "";
   $("errorbox").hidden = true;
   showStatus("Starting…");
+  setBar($("buildbar"), 0);
   startTimer();
   const opts = options();
   worker = new Worker("js/worker.js");
@@ -269,6 +293,7 @@ function build(save) {
     const m = e.data;
     if (m.type === "log") logLine(m.msg);
     else if (m.type === "stage") $("stagetext").textContent = m.msg;
+    else if (m.type === "progress") setBar($("buildbar"), m.value);
     else if (m.type === "done") {
       clearInterval(timer);
       worker.terminate();
@@ -321,6 +346,7 @@ async function loadJson(file) {
   $("log").textContent = "";
   $("errorbox").hidden = true;
   showStatus("Reading " + file.name + "…");
+  $("buildbar").hidden = true;
   $("elapsed").textContent = "";
   try {
     const data = JSON.parse(await file.text());

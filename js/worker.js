@@ -11,6 +11,8 @@ importScripts("dds.js");
 
 const log = (msg) => postMessage({ type: "log", msg });
 const stage = (msg) => postMessage({ type: "stage", msg });
+/* overall build progress, 0..1 */
+const progress = (value) => postMessage({ type: "progress", value });
 
 // --------------------------------------------------------------------------
 // tag -> display name. Best-effort, hand-checked; anything missing shows the
@@ -549,8 +551,9 @@ async function attachFlags(rows, fs) {
     log("flags: no coat-of-arms definitions found in " + fs.label + " - skipping");
     return 0;
   }
-  let n = 0;
+  let n = 0, done = 0;
   for (const r of rows) {
+    progress(0.6 + 0.15 * (done++ / rows.length));
     let uri = null;
     try {
       uri = await fr.dataURI(r.tag);
@@ -919,9 +922,12 @@ async function buildMapData(data, sections, save, fs) {
   let minX = Infinity, maxX = -1, minY = Infinity, maxY = -1;
   const onHeader = (w, h) => {
     W0 = w;
+    fullRows = h;
     cls = nPal <= 256 ? new Uint8Array(w * h) : new Uint16Array(w * h);
   };
+  let fullRows = 1;
   const { width: fullW, height: fullH } = await decodePNGRows(locFile, (y, row, ch) => {
+    if ((y & 255) === 0) progress(0.78 + 0.17 * (y / fullRows));
     const w = W0;
     const base = y * w;
     let first = -1, last = -1;
@@ -957,6 +963,7 @@ async function buildMapData(data, sections, save, fs) {
   }
 
   // Lanczos resize (horizontal pass into uint8, then vertical), like PIL.
+  progress(0.95);
   const out = new Uint8ClampedArray(tw * th * 4);
   const hc = resampleCoeffs(cw, tw), vc = resampleCoeffs(chh, th);
   const hRows = new Map();
@@ -1088,7 +1095,9 @@ async function scanSections(save) {
       if (p < u8.length) await check(u8, p, base + p);
     }
     lineStart = u8[u8.length - 1] === 10;
-    stage(`Scanning the save… ${Math.round(Math.min(1, (base + CH) / size) * 100)}%`);
+    const frac = Math.min(1, (base + CH) / size);
+    stage(`Reading the save… ${Math.round(frac * 100)}%`);
+    progress(0.35 * frac);
   }
   const out = new Map();
   marks.forEach(([name, start], idx) => {
@@ -1169,6 +1178,7 @@ async function extract(save, sections, topAi = 0) {
 
   // ---- countries -------------------------------------------------------
   stage("Reading countries…");
+  progress(0.36);
   let ctext = await readSpan(save, ...sections.get("countries")[0]);
   const dbAt = ctext.indexOf("database={");
   if (dbAt < 0) throw new UserError("The save's countries section has no database.");
@@ -1217,6 +1227,7 @@ async function extract(save, sections, topAi = 0) {
 
   // ---- locations: raw materials, development, tax ----------------------
   stage("Reading locations…");
+  progress(0.5);
   const own = new Counter();
   const raw = new Map();
   const dev = new Counter(), tax = new Counter(), ptax = new Counter();
@@ -1250,6 +1261,7 @@ async function extract(save, sections, topAi = 0) {
 
   // ---- subunits: standing army / navy ----------------------------------
   stage("Counting armies…");
+  progress(0.55);
   const army = new Counter(), levies = new Counter(), regulars = new Counter();
   const mercs = new Counter(), navy = new Counter(), subs = new Counter();
 
@@ -1489,11 +1501,13 @@ self.onmessage = async (e) => {
     }
     if (opts.map && fs) {
       stage("Painting the map…");
+      progress(0.75);
       data.map = await buildMapData(data, sections, save, fs);
     } else if (opts.map) {
       log("map: no EU5 install linked - skipping");
     }
     log(`done in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+    progress(1);
     postMessage({ type: "done", data });
   } catch (err) {
     postMessage({

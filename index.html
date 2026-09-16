@@ -14,8 +14,8 @@
 <body>
 <div class="wrap">
   <header class="mast">
-    <p class="eyebrow"><span>Europa Universalis V</span><span><b>Standings</b></span></p>
-    <h1>Crowns, <em>counted</em></h1>
+    <p class="eyebrow"><span>Europa Universalis V</span></p>
+    <h1>EU5 Leaderboard</h1>
     <p class="lede">Drop in a save and get the leaderboard: every player nation's population, tax base,
       armies, coats of arms, a political map and the blood ledger. It all runs in this page &mdash;
       <strong>your save is never uploaded</strong>.</p>
@@ -43,6 +43,7 @@
           <span class="gamestatus" id="gamestatus">Not linked</span>
           <button class="btn quiet" id="gameforget" type="button" hidden>Forget</button>
         </div>
+        <progress class="bar" id="gamebar" max="1" hidden></progress>
         <input type="file" id="gameinput" webkitdirectory directory multiple hidden>
         <p class="hint">Steam's default is <code class="path">C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis V</code>
           &mdash; in Steam, right-click the game &rarr; <em>Manage</em> &rarr; <em>Browse local files</em> to open it.
@@ -72,6 +73,7 @@
         <span id="stagetext">Working…</span>
         <span class="elapsed mono" id="elapsed"></span>
       </div>
+      <progress class="bar" id="buildbar" max="1" value="0"></progress>
       <div class="errorbox" id="errorbox" hidden></div>
       <details class="logbox"><summary>Details</summary><pre id="log"></pre></details>
     </section>
