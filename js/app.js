@@ -127,10 +127,10 @@ function sanitizeData(d) {
 // ==========================================================================
 // Game folder linking
 // ==========================================================================
-// Chrome's directory picker refuses anything under Program Files (where
-// Steam installs by default) and reports it as a plain cancel, so the game
-// folder always comes in through a folder <input>. The browser only lists
-// the files; the few we need are read locally when a report is built.
+// Chrome refuses to let a page pick folders under Program Files, where
+// Steam installs by default, so the game folder can also be dragged in
+// (or reached through a junction, see the page). Either way only the few
+// files we need are read, locally, when a report is built.
 const NEEDED = ["main_menu/common/named_colors/", "main_menu/common/coat_of_arms/coat_of_arms/",
   "main_menu/gfx/coat_of_arms/", "in_game/map_data/", "in_game/setup/countries/"];
 let game = null; // {files: Map(relative path -> File), label}
@@ -167,6 +167,56 @@ function linkFileList(list) {
   game = { files, label };
   setGameStatus(`Linked: ${label}`, true);
   maybeRebuild();
+}
+
+/* A folder dragged in from Explorer. The drop hands over a lazy directory
+   entry, so only the handful of subfolders we need are ever opened. */
+const entryCall = (fn) => new Promise((res, rej) => fn(res, rej));
+const subdir = (dir, path) => entryCall((ok, no) => dir.getDirectory(path, {}, ok, no)).catch(() => null);
+
+async function readTree(dir, rel, files) {
+  const reader = dir.createReader();
+  for (;;) {
+    const batch = await entryCall((ok, no) => reader.readEntries(ok, no));
+    if (!batch.length) break;
+    for (const e of batch) {
+      if (e.isDirectory) await readTree(e, rel + e.name + "/", files);
+      else files.set(rel + e.name, await entryCall((ok, no) => e.file(ok, no)));
+    }
+  }
+}
+
+async function linkDroppedFolder(entry) {
+  setGameStatus(`Reading ${entry.name}…`);
+  try {
+    let root = entry;
+    if (!(await subdir(root, "main_menu"))) root = await subdir(entry, "game");
+    if (!root || !(await subdir(root, "main_menu/common/coat_of_arms"))) {
+      setGameStatus(`“${entry.name}” doesn't contain the game's files — drop Europa Universalis V, or the game folder inside it.`);
+      return;
+    }
+    const files = new Map();
+    for (const n of NEEDED) {
+      const d = await subdir(root, n.replace(/\/$/, ""));
+      if (d) await readTree(d, n, files);
+    }
+    game = { files, label: entry.name };
+    setGameStatus(`Linked: ${entry.name}`, true);
+    maybeRebuild();
+  } catch (err) {
+    setGameStatus(`Couldn't read “${entry.name}”: ${err.message || err.name}. Try the folder link below.`);
+  }
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  document.querySelectorAll(".over").forEach((el) => el.classList.remove("over"));
+  const dt = e.dataTransfer;
+  if (!dt) return;
+  const item = dt.items && dt.items[0];
+  const entry = item && item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+  if (entry && entry.isDirectory) linkDroppedFolder(entry);
+  else if (dt.files.length) handleFile(dt.files[0]);
 }
 
 function forgetGame() {
@@ -338,20 +388,20 @@ function init() {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); }
   });
   input.addEventListener("change", () => { handleFile(input.files[0]); input.value = ""; });
-  ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => {
-    e.preventDefault();
-    drop.classList.add("over");
-  }));
-  ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, () => drop.classList.remove("over")));
-  drop.addEventListener("drop", (e) => {
-    e.preventDefault();
-    handleFile(e.dataTransfer.files[0]);
-  });
-  // A save dropped anywhere else shouldn't navigate away from the page.
+  for (const zone of [drop, $("step-game")]) {
+    ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, () => zone.classList.add("over")));
+    zone.addEventListener("dragleave", (e) => {
+      if (!zone.contains(e.relatedTarget)) zone.classList.remove("over");
+    });
+  }
+  // Drops anywhere on the page: folders link the game, files are saves.
   window.addEventListener("dragover", (e) => e.preventDefault());
-  window.addEventListener("drop", (e) => {
-    e.preventDefault();
-    if (e.dataTransfer && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  window.addEventListener("drop", onDrop);
+  $("junccopy").addEventListener("click", () => {
+    const btn = $("junccopy");
+    navigator.clipboard.writeText($("junccmd").textContent).then(
+      () => { btn.textContent = "Copied"; setTimeout(() => { btn.textContent = "Copy"; }, 2000); },
+      () => { btn.textContent = "Select and copy it"; });
   });
 
   $("gamebtn").addEventListener("click", () => $("gameinput").click());

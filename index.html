@@ -35,18 +35,29 @@
 
       <div class="step" id="step-game">
         <div class="stephead"><span class="stepno">2</span><h2>Your EU&nbsp;V install</h2><span class="opt">optional</span></div>
-        <p class="note">Coats of arms and the map are drawn from the game's own files. Pick the
-          <code>game</code> folder inside your EU&nbsp;V install &mdash; nothing is copied or sent anywhere.</p>
+        <p class="note">Coats of arms and the map are drawn from the game's own files. <strong>Drag your
+          <code>Europa Universalis V</code> folder from File Explorer onto this box</strong> &mdash; it's only read
+          here, never copied or sent anywhere.</p>
         <div class="gamerow">
           <button class="btn primary" id="gamebtn" type="button">Choose game folder</button>
           <span class="gamestatus" id="gamestatus">Not linked</span>
           <button class="btn quiet" id="gameforget" type="button" hidden>Forget</button>
         </div>
         <input type="file" id="gameinput" webkitdirectory directory multiple hidden>
-        <p class="hint">Steam's default is <code class="path">C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis V\game</code>
-          &mdash; in Steam, right-click the game &rarr; <em>Manage</em> &rarr; <em>Browse local files</em> to find yours.
-          Chrome will ask whether to &ldquo;upload&rdquo; the folder's files: that's its standard wording for letting
-          a page read them, and nothing leaves your computer.</p>
+        <p class="hint">Steam's default is <code class="path">C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis V</code>
+          &mdash; in Steam, right-click the game &rarr; <em>Manage</em> &rarr; <em>Browse local files</em> to open it.
+          Installed somewhere other than <code>Program Files</code>? The button works too.</p>
+        <details class="fallback">
+          <summary>Chrome says the folder &ldquo;contains system files&rdquo;?</summary>
+          <p>Chrome won't let pages open folders inside <code>Program Files</code>. If dragging doesn't work
+            either, give the game folder a second address outside it. Paste this into a Command Prompt or
+            PowerShell window and press Enter &mdash; it creates a link, not a copy, and needs no admin rights:</p>
+          <div class="cmdrow"><code id="junccmd">cmd /c mklink /J "%USERPROFILE%\EU5 game" "C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis V\game"</code>
+            <button class="btn" id="junccopy" type="button">Copy</button></div>
+          <p>Then choose or drag the new <code>EU5 game</code> folder from your user folder
+            (<code>C:\Users\<em>your name</em></code>). Change the second path if the game is installed
+            elsewhere. Firefox doesn't have this restriction at all.</p>
+        </details>
         <div class="opts">
           <label><input type="checkbox" id="optflags" checked> Coats of arms</label>
           <label><input type="checkbox" id="optmap" checked> Political map</label>
@@ -100,10 +111,10 @@
           for this page itself and its fonts.</p></details>
       <details><summary>Which browsers work?</summary>
         <p>Any current Chrome, Edge, Firefox or Safari. The game folder is linked for the current visit
-          only, so you'll pick it again next time.</p></details>
+          only, so you'll add it again next time.</p></details>
       <details><summary>Why does Chrome say it will upload files?</summary>
-        <p>Choosing a folder in a web page always shows that prompt in Chrome, even when, as here, the page
-          only reads a few files locally. You can check: this page makes no network requests while building
+        <p>Choosing a folder with the button always shows that prompt in Chrome, even when, as here, the page
+          only reads a few files locally. Dragging the folder in skips it. You can check: this page makes no network requests while building
           a report (open your browser's developer tools &rarr; Network).</p></details>
       <details><summary>What can I do with the report?</summary>
         <p><em>Download report</em> saves one self-contained HTML file you can send to anyone &mdash; it opens

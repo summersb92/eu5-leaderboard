@@ -64,6 +64,7 @@ h2{font-family:Fraunces,Georgia,serif; font-weight:600; font-size:23px; letter-s
 .drop{display:flex; flex-direction:column; gap:8px; justify-content:center; min-height:178px;
   border:1.5px dashed var(--line); border-radius:6px; padding:22px; cursor:pointer;
   background:var(--raised); text-align:center; transition:border-color .12s, background .12s}
+.step.over{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-wash)}
 .drop:hover,.drop.over{border-color:var(--accent); background:var(--accent-wash)}
 .dropmain{font-size:16.5px; font-weight:600}
 .dropmain u{color:var(--accent); text-underline-offset:3px}
@@ -79,6 +80,12 @@ h2{font-family:Fraunces,Georgia,serif; font-weight:600; font-size:23px; letter-s
 .gamerow{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
 .gamestatus{font-size:13.5px; color:var(--ink-3); overflow-wrap:anywhere}
 .gamestatus.ok{color:var(--verd); font-weight:600}
+.fallback{margin-top:12px; font-size:13px; color:var(--ink-2)}
+.fallback summary{cursor:pointer; color:var(--ink-3)}
+.fallback summary:hover{color:var(--accent)}
+.fallback p{margin:8px 0}
+.cmdrow{display:flex; gap:8px; align-items:flex-start}
+.cmdrow code{flex:1; display:block; padding:8px 10px; font-size:11.5px; line-height:1.5; user-select:all}
 .opts{display:flex; flex-wrap:wrap; gap:10px 22px; margin-top:18px; padding-top:14px;
   border-top:1px solid var(--line-soft); font-size:13.5px; color:var(--ink-2)}
 .opts label{display:flex; align-items:center; gap:7px; cursor:pointer}
