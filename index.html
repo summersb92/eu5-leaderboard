@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EU5 Leaderboard</title>
+<meta name="description" content="Build a standings report from a Europa Universalis V save, entirely in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👑</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <p class="eyebrow"><span>Europa Universalis V</span><span><b>Standings</b></span></p>
+    <h1>Crowns, <em>counted</em></h1>
+    <p class="lede">Drop in a save and get the leaderboard: every player nation's population, tax base,
+      armies, coats of arms, a political map and the blood ledger. It all runs in this page &mdash;
+      <strong>your save is never uploaded</strong>.</p>
+  </header>
+
+  <main>
+    <section class="steps" aria-label="Build a report">
+      <div class="step" id="step-save">
+        <div class="stephead"><span class="stepno">1</span><h2>Your save</h2></div>
+        <label class="drop" id="drop" tabindex="0">
+          <input type="file" id="saveinput" accept=".eu5,.json" hidden>
+          <span class="dropmain">Drop a <code>.eu5</code> save here, or <u>choose one</u></span>
+          <span class="dropsub">It has to be written in debug mode &mdash; <a href="#readable">how</a>.
+            Usually in <code class="path">Documents\Paradox Interactive\Europa Universalis V\save games</code></span>
+        </label>
+      </div>
+
+      <div class="step" id="step-game">
+        <div class="stephead"><span class="stepno">2</span><h2>Your EU&nbsp;V install</h2><span class="opt">optional</span></div>
+        <p class="note">Coats of arms and the map are drawn from the game's own files. Point this at the
+          folder the game is installed in &mdash; nothing is copied or sent anywhere.</p>
+        <div class="gamerow">
+          <button class="btn primary" id="gamebtn" type="button">Choose game folder</button>
+          <span class="gamestatus" id="gamestatus">Not linked</span>
+          <button class="btn quiet" id="gameforget" type="button" hidden>Forget</button>
+        </div>
+        <input type="file" id="gameinput" webkitdirectory directory multiple hidden>
+        <p class="hint">Steam's default is <code class="path">C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis V</code>
+          &mdash; in Steam, right-click the game &rarr; <em>Manage</em> &rarr; <em>Browse local files</em> to find yours.</p>
+        <div class="opts">
+          <label><input type="checkbox" id="optflags" checked> Coats of arms</label>
+          <label><input type="checkbox" id="optmap" checked> Political map</label>
+          <label>Also rank the top <input type="number" id="opttop" min="0" max="50" value="0" inputmode="numeric"> AI nations</label>
+        </div>
+      </div>
+    </section>
+
+    <section class="status" id="status" hidden aria-live="polite">
+      <div class="statusline">
+        <span class="spinner" id="spinner" aria-hidden="true"></span>
+        <span id="stagetext">Working…</span>
+        <span class="elapsed mono" id="elapsed"></span>
+      </div>
+      <div class="errorbox" id="errorbox" hidden></div>
+      <details class="logbox"><summary>Details</summary><pre id="log"></pre></details>
+    </section>
+  </main>
+</div>
+
+<section class="result" id="result" hidden>
+  <div class="wrap">
+    <div class="toolbar">
+      <span class="savename mono" id="savename"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="rebuild" type="button" hidden>Rebuild</button>
+      <button class="btn" id="dlhtml" type="button">Download report</button>
+      <button class="btn" id="dljson" type="button">Download data</button>
+      <button class="btn" id="opentab" type="button">Open in new tab</button>
+    </div>
+    <p class="notice" id="notice" hidden></p>
+  </div>
+  <iframe id="report" title="Leaderboard report" allow="clipboard-write"></iframe>
+</section>
+
+<div class="wrap">
+  <section class="help" id="readable">
+    <div class="sechead"><h2>Making a readable save</h2><span class="rule"></span></div>
+    <p class="note">EU&nbsp;V normally packs its saves into a private binary format. Debug mode makes it write
+      plain text instead, which is what this page reads.</p>
+    <ol class="howto">
+      <li>In Steam, right-click <em>Europa Universalis V</em> &rarr; <em>Properties</em> &rarr; <em>General</em>
+        &rarr; <em>Launch Options</em>, and add <code>-debug_mode</code>.</li>
+      <li>Launch the game, load your save and save it again (an autosave works too).</li>
+      <li>Optionally remove <code>-debug_mode</code> afterwards &mdash; it disables achievements while it's on.</li>
+    </ol>
+    <div class="faq">
+      <details><summary>Is my save uploaded anywhere?</summary>
+        <p>No. This is a static page; the save is read by your own browser, in a background thread, and
+          the report is built on your machine. Close the tab and it's gone. The only network requests are
+          for this page itself and its fonts.</p></details>
+      <details><summary>Which browsers work?</summary>
+        <p>Any current Chrome, Edge, Firefox or Safari. Chrome and Edge also remember the linked game
+          folder between visits; other browsers ask for it each time.</p></details>
+      <details><summary>What can I do with the report?</summary>
+        <p><em>Download report</em> saves one self-contained HTML file you can send to anyone &mdash; it opens
+          in any browser with nothing to install. <em>Download data</em> saves the extracted numbers as JSON;
+          drop that file back on this page later to rebuild the report without the save.</p></details>
+      <details><summary>It says my save is packed</summary>
+        <p>The save wasn't written in debug mode. Follow the steps above, then load and re-save it in-game.
+          A readable save's first bytes are <code>SAV0200</code>; a packed one starts <code>SAV0203</code>.</p></details>
+    </div>
+  </section>
+  <footer><span>Not affiliated with Paradox Interactive. Game files stay on your computer and are never redistributed.</span></footer>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

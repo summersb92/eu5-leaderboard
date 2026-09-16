@@ -1,0 +1,730 @@
+<title>__TITLE__</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#E7E9EC; --surface:#F4F5F7; --surface-2:#DBDFE4; --raised:#FFFFFF;
+  --ink:#14181F; --ink-2:#4B5462; --ink-3:#7B8492;
+  --line:#C6CBD3; --line-soft:#D6DAE0;
+  --accent:#8A5A12; --accent-wash:rgba(138,90,18,.12);
+  --verd:#1D6159; --alarm:#9B3B31;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#111419; --surface:#181C23; --surface-2:#212731; --raised:#1E242D;
+    --ink:#E9EBEF; --ink-2:#A5AEBB; --ink-3:#6D7785;
+    --line:#2B323D; --line-soft:#242A34;
+    --accent:#D3A44A; --accent-wash:rgba(211,164,74,.14);
+    --verd:#57AFA3; --alarm:#D3695C;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111419; --surface:#181C23; --surface-2:#212731; --raised:#1E242D;
+  --ink:#E9EBEF; --ink-2:#A5AEBB; --ink-3:#6D7785;
+  --line:#2B323D; --line-soft:#242A34;
+  --accent:#D3A44A; --accent-wash:rgba(211,164,74,.14);
+  --verd:#57AFA3; --alarm:#D3695C;
+}
+*{box-sizing:border-box}
+html{overflow-x:hidden}
+body{background:var(--bg); color:var(--ink);
+  font-family:Archivo,"Helvetica Neue",Arial,sans-serif; font-size:15px; line-height:1.55; margin:0;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px; margin:0 auto; padding-inline:20px; padding-block:0 72px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
+.num{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:13.5px}
+.mast{padding-block:56px 34px; border-bottom:1px solid var(--line)}
+.masttop{display:block}
+.eyebrow{font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-3);
+  font-weight:600; margin:0 0 18px; display:flex; gap:14px; flex-wrap:wrap; align-items:baseline}
+.eyebrow b{color:var(--accent); font-weight:600}
+h1{font-family:Fraunces,Georgia,serif; font-weight:800; font-size:clamp(40px,7.2vw,68px);
+  line-height:1.02; letter-spacing:-.018em; margin:0; text-wrap:balance}
+h1 em{font-style:normal; color:var(--accent)}
+.facts{display:flex; flex-wrap:wrap; gap:0; margin-top:30px; border-top:1px solid var(--line-soft)}
+.fact{flex:1 1 150px; padding:14px 20px 14px 0; border-right:1px solid var(--line-soft)}
+.fact:last-child{border-right:0}
+.fact dt{font-size:11px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3); font-weight:600}
+.fact dd{margin:5px 0 0; font-family:"IBM Plex Mono",Menlo,monospace; font-size:20px;
+  font-variant-numeric:tabular-nums; color:var(--ink)}
+.fact dd small{font-size:12px; color:var(--ink-3); letter-spacing:.04em}
+section{padding-block:46px 0}
+.sechead{display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; margin-bottom:6px}
+h2{font-family:Fraunces,Georgia,serif; font-weight:600; font-size:27px; letter-spacing:-.01em; margin:0}
+.sechead .rule{flex:1; height:1px; background:var(--line); min-width:24px}
+.note{color:var(--ink-2); font-size:14.5px; max-width:70ch; margin:10px 0 22px}
+.note code{font-family:"IBM Plex Mono",Menlo,monospace; font-size:12.5px; background:var(--surface-2);
+  padding:1px 5px; border-radius:3px}
+.btn{font:600 11.5px/1 Archivo,sans-serif; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-2); background:var(--surface-2); border:1px solid var(--line);
+  border-radius:4px; padding:7px 12px; cursor:pointer}
+.btn:hover{color:var(--accent); border-color:var(--accent)}
+.btn.ok{color:var(--verd); border-color:var(--verd)}
+.colpanel{margin:12px 0 0; padding:14px 16px; border:1px solid var(--line);
+  border-radius:6px; background:var(--surface);
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:6px 18px}
+.colpanel label{display:flex; align-items:center; gap:7px; font-size:12.5px;
+  color:var(--ink-2); cursor:pointer}
+.colpanel label:hover{color:var(--accent)}
+.colpanel input{accent-color:var(--accent); margin:0}
+.colpanel .colfoot{grid-column:1/-1; display:flex; gap:10px; align-items:center;
+  padding-top:8px; margin-top:4px; border-top:1px solid var(--line-soft);
+  font-size:12px; color:var(--ink-3)}
+.copywrap{margin:12px 0 0}
+.copywrap summary{cursor:pointer; font-size:12.5px; color:var(--ink-3); list-style:none}
+.copywrap summary::-webkit-details-marker{display:none}
+.copywrap summary:hover{color:var(--accent)}
+.copywrap textarea{width:100%; margin-top:8px; min-height:230px; resize:vertical;
+  font-family:"IBM Plex Mono",Menlo,monospace; font-size:12px; line-height:1.45;
+  color:var(--ink); background:var(--surface); border:1px solid var(--line);
+  border-radius:5px; padding:12px; white-space:pre; overflow-wrap:normal; overflow-x:auto}
+.tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:6px; background:var(--surface);
+  width:auto; margin-left:calc(50% - 50vw + 16px); margin-right:calc(50% - 50vw + 16px)}
+table{border-collapse:collapse; width:100%; min-width:860px}
+thead th{position:sticky; top:0; z-index:2; background:var(--surface-2); font-size:10.5px;
+  letter-spacing:.11em; text-transform:uppercase; font-weight:700; color:var(--ink-2);
+  text-align:right; padding:11px 9px; white-space:nowrap; border-bottom:1px solid var(--line);
+  cursor:pointer; user-select:none}
+thead th:first-child,thead th.l{text-align:left}
+thead th:hover{color:var(--accent)}
+thead th .car{opacity:0; margin-left:5px; font-size:9px}
+thead th[aria-sort] .car{opacity:1; color:var(--accent)}
+tbody tr.row{border-bottom:1px solid var(--line-soft); cursor:pointer}
+tbody tr.row:last-of-type{border-bottom:0}
+tbody tr.row:hover{background:var(--accent-wash)}
+td{padding:10px 9px; text-align:right; white-space:nowrap; vertical-align:middle}
+td.l{text-align:left}
+.gp{font-family:Fraunces,Georgia,serif; font-size:20px; font-weight:600; color:var(--ink-2); width:1%}
+.gp.top{color:var(--accent)}
+.nat{display:flex; align-items:center; gap:10px; min-width:200px}
+.flag{width:36px; height:24px; flex:none; border:1px solid var(--line); border-radius:2px;
+  object-fit:cover; display:block; background:var(--surface-2)}
+.flag.ph{width:36px; height:24px}
+.tag{font-family:"IBM Plex Mono",Menlo,monospace; font-weight:600; font-size:12px; letter-spacing:.06em;
+  color:var(--ink); background:var(--surface-2); border:1px solid var(--line); border-radius:3px;
+  padding:2px 6px; flex:none}
+.natname{font-weight:600; font-size:14.5px; line-height:1.2}
+.player{font-size:12px; color:var(--ink-3); line-height:1.3}
+.ai{font-style:italic}
+.bar{display:block; height:3px; border-radius:2px; background:var(--accent); opacity:.55;
+  margin-top:4px; margin-left:auto}
+.spark{display:block; margin-left:auto}
+.warnv{color:var(--alarm)}
+.zero{color:var(--ink-3)}
+tr.detail{display:none}
+tr.detail.open{display:table-row}
+tr.detail td{padding:0; text-align:left; white-space:normal}
+.panel{padding:22px 16px 26px 30px; border-left:3px solid var(--accent); background:var(--raised);
+  border-bottom:1px solid var(--line)}
+.grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:24px 30px}
+.grp h4{font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3);
+  font-weight:700; margin:0 0 9px; padding-bottom:6px; border-bottom:1px solid var(--line-soft)}
+.kv{display:flex; justify-content:space-between; gap:12px; padding:3px 0; font-size:13px; align-items:baseline}
+.kv span{color:var(--ink-2)}
+.kv b{font-family:"IBM Plex Mono",Menlo,monospace; font-weight:500; font-variant-numeric:tabular-nums; color:var(--ink)}
+.kv b.rank{color:var(--ink-3); font-size:11px; font-weight:400}
+.chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:4px}
+.chip{font-size:11.5px; border:1px solid var(--line); border-radius:3px; padding:2px 7px;
+  background:var(--surface); color:var(--ink-2)}
+.chip b{font-family:"IBM Plex Mono",Menlo,monospace; color:var(--accent); font-weight:600; margin-left:4px}
+.full{grid-column:1/-1}
+.chartbox{border:1px solid var(--line); border-radius:6px; background:var(--surface); padding:18px 14px 8px}
+svg.scatter{display:block; width:100%; height:auto}
+.matwrap{overflow-x:auto; border:1px solid var(--line); border-radius:6px; background:var(--surface);
+  width:auto; margin-left:calc(50% - 50vw + 16px); margin-right:calc(50% - 50vw + 16px)}
+table.mat{min-width:720px}
+table.mat th.good{text-align:left; font-family:Archivo,sans-serif; text-transform:none; letter-spacing:0;
+  font-size:13px; font-weight:500; color:var(--ink); cursor:default; position:static;
+  background:transparent; border-bottom:1px solid var(--line-soft); padding:7px 12px}
+table.mat thead th{cursor:pointer; text-align:center; padding:9px 6px}
+table.mat th.good{cursor:default}
+table.mat td{text-align:center; padding:0; border-bottom:2px solid var(--surface);
+  border-right:2px solid var(--surface); background-clip:padding-box}
+table.mat tbody tr:hover th.good{color:var(--accent)}
+.cell{display:block; padding:7px 6px; font-family:"IBM Plex Mono",Menlo,monospace; font-size:12.5px;
+  font-variant-numeric:tabular-nums; color:var(--ink)}
+.cell.e{color:var(--ink-3); opacity:.35}
+.tot{font-size:11px; color:var(--ink-3)}
+.mapdetails summary{cursor:pointer; list-style:none}
+.mapdetails summary::-webkit-details-marker{display:none}
+.mapdetails summary:hover h2{color:var(--accent)}
+.mapdetails .car{opacity:.6; font-size:13px; color:var(--ink-3); transition:transform .15s}
+.mapdetails[open] .car{transform:rotate(90deg)}
+.mapwrap{border:1px solid var(--line); border-radius:6px; background:var(--surface); padding:14px;
+  width:auto; margin-left:calc(50% - 50vw + 16px); margin-right:calc(50% - 50vw + 16px)}
+.mapwrap img{display:block; width:100%; height:auto; border-radius:4px; border:1px solid var(--line-soft)}
+.maplegend{display:flex; flex-wrap:wrap; gap:7px 20px; margin:16px 4px 4px}
+.mapleg{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-2)}
+.mapleg .sw{width:13px; height:13px; border-radius:3px; flex:none; border:1px solid var(--line)}
+.mapleg .sw.hatch{background:repeating-linear-gradient(45deg, var(--ink-3) 0 2px, transparent 2px 5px);
+  opacity:.7}
+.mapleg b{color:var(--ink); font-weight:600; font-family:Archivo,sans-serif}
+.mapactions{margin:16px 4px 0; display:flex; gap:10px; flex-wrap:wrap}
+footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3);
+  font-size:12.5px; display:flex; gap:18px; flex-wrap:wrap; justify-content:space-between}
+@media (max-width:640px){.mast{padding-block:38px 26px}.panel{padding:18px 14px 22px 18px}
+  .fact{flex-basis:calc(50% - 1px); border-right:0}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+</style>
+
+<div class="wrap">
+<header class="mast">
+  <p class="eyebrow" id="eyebrow"></p>
+  <div class="masttop">
+    <h1 id="h1"></h1>
+  </div>
+  <dl class="facts" id="facts"></dl>
+</header>
+
+<section>
+  <div class="sechead"><h2>The standings</h2><span class="rule"></span>
+    <span class="eyebrow" style="margin:0">click a column to sort &middot; click a nation to open it</span>
+    <button class="btn" id="colbtn" type="button">Columns</button>
+    <button class="btn" id="copybtn" type="button">Copy for Discord</button></div>
+  <div class="colpanel" id="colpanel" hidden></div>
+  <div class="tablewrap"><table id="lb"><thead><tr id="hrow"></tr></thead><tbody id="tb"></tbody></table></div>
+  <details class="copywrap"><summary>&#9656; Show the Discord text (follows the sort above)</summary>
+    <textarea id="dtext" readonly spellcheck="false"></textarea></details>
+</section>
+
+<section id="mapsec" hidden>
+  <details class="mapdetails" open>
+    <summary class="sechead"><h2>The map</h2><span class="rule"></span><span class="car">&#9656;</span></summary>
+    <p class="note">Every location tinted by owner, in the same colors EU&nbsp;V's own map mode uses for each nation &mdash; everyone else's territory sits in flat grey for context. Dependencies (vassals, fiefdoms, tributaries, and the like) are hatched in their overlord's color; a personal union's junior partner is hatched with its own secondary color instead of white, so it reads apart from an ordinary subject.</p>
+    <div class="mapwrap"><img id="mapimg" alt="Political map of the tracked nations">
+      <div class="maplegend" id="maplegend"></div></div>
+    <div class="mapactions">
+      <button class="btn" id="mapimgbtn" type="button">Copy map image</button>
+      <button class="btn" id="mapcopybtn" type="button">Copy for Discord (with ledger)</button>
+    </div>
+    <details class="copywrap"><summary>&#9656; Show the Discord text</summary>
+      <textarea id="mapdtext" readonly spellcheck="false"></textarea></details>
+  </details>
+</section>
+
+<section>
+  <div class="sechead"><h2>Tall or wide</h2><span class="rule"></span></div>
+  <p class="note">Tax base against locations owned. High and to the left is a small, intensely developed realm; low and to the right is a big thin one. The dotted line is the group average of <span class="mono" id="avgv">&mdash;</span> tax per location &mdash; everything above it earns more from each place it holds than the group typically does.</p>
+  <div class="chartbox"><svg class="scatter" id="sc" viewBox="0 0 780 440" role="img" aria-label="Tax base against locations owned"></svg></div>
+</section>
+
+<section>
+  <div class="sechead"><h2>What each of you produces</h2><span class="rule"></span></div>
+  <p class="note" id="goodsnote"></p>
+  <div class="matwrap"><table class="mat" id="mat"></table></div>
+</section>
+
+<section>
+  <div class="sechead"><h2>Blood ledger</h2><span class="rule"></span></div>
+  <p class="note" id="warnote"></p>
+  <div class="tablewrap"><table id="war"></table></div>
+</section>
+
+<footer><span id="src"></span><span id="stamp"></span></footer>
+</div>
+
+<script>
+const D=__DATA__;
+const R=D.rows, W=D.world;
+const $=s=>document.getElementById(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>"&#"+c.charCodeAt(0)+";");
+const el=(t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e;};
+const N=n=>Number(n)||0;
+const int=v=>Math.round(N(v)).toLocaleString("en-US");
+const men=v=>Math.round(N(v)*1000).toLocaleString("en-US");
+const pop=v=>N(v)>=1000?(N(v)/1000).toFixed(2)+" M":Math.round(N(v))+" K";
+const f1=v=>N(v).toFixed(1), f2=v=>N(v).toFixed(2);
+const ord=n=>{const s=["th","st","nd","rd"],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
+const PRETTY={goods_gold:"gold",fiber_crops:"fibre crops",wild_game:"wild game",naval_supplies:"naval supplies",fine_cloth:"fine cloth"};
+const pretty=g=>PRETTY[g]||g.replace(/_/g," ");
+const nPlayers=R.filter(r=>r.is_player).length;
+
+$("eyebrow").innerHTML='<span>Europa Universalis V'+(W.multiplayer?" &middot; multiplayer":" &middot; single player")+'</span><span><b>'+esc(W.date)+'</b></span><span>patch '+esc(W.version)+'</span>';
+$("h1").innerHTML=(document.title.split(" of ")[0]||"Standings")+'<br><em>of '+esc((W.date+"").split(".")[0])+'</em>';
+$("src").innerHTML='Read from <span class="mono">'+esc(W.save)+'</span> &middot; debug-mode plaintext save';
+$("stamp").textContent="In-game date "+W.date+" · "+R.length+" nations shown";
+$("goodsnote").textContent="Raw materials by number of locations producing them, counted from every location each nation owns. The shading runs with the count.";
+$("warnote").innerHTML='EU&nbsp;V keeps a running count of men a country has killed in battle — the save\'s <code>land_units_killed</code> — but it does <em>not</em> keep a lifetime tally of men lost. Losses survive only for wars still in progress when the save was written ('+W.wars_live+' of them here), so a nation at peace shows none. The two loss columns below count those live wars only.';
+
+if(D.map){
+  $("mapsec").hidden=false;
+  $("mapimg").src=D.map.image;
+  let legHtml=D.map.legend.map(m=>
+    '<span class="mapleg"><span class="sw" style="background:'+m.color+'"></span><b>'+esc(m.name)+'</b>'+
+    (m.player?' &middot; '+esc(m.player):'')+'</span>').join("");
+  if(D.map.has_subjects)
+    legHtml+='<span class="mapleg"><span class="sw hatch"></span>Dependency (vassal, fiefdom, tributary, personal union, &hellip;)</span>';
+  $("maplegend").innerHTML=legHtml;
+
+  /* Copy the map itself (not text) to the clipboard as an image, so it can
+     be pasted straight into Discord like any other picture. Needs the
+     async Clipboard API with ClipboardItem (Chrome/Edge; not every
+     browser) - falls back to pointing at the ordinary right-click menu,
+     which works anywhere since the image is just a normal <img>. */
+  const ibtn=$("mapimgbtn");
+  if(ibtn) ibtn.onclick=async function(){
+    const btn=this;
+    const done=(ok,msg)=>{ btn.textContent=msg; btn.classList.toggle("ok",ok);
+      setTimeout(()=>{btn.textContent="Copy map image"; btn.classList.remove("ok");},2600); };
+    try{
+      if(!navigator.clipboard || !window.ClipboardItem) throw new Error("unsupported");
+      const res=await fetch(D.map.image);
+      const blob=await res.blob();
+      await navigator.clipboard.write([new ClipboardItem({[blob.type||"image/png"]: blob})]);
+      done(true,"Copied");
+    }catch(e){
+      done(false,"Right-click the map → Copy Image");
+    }
+  };
+}
+
+const worldArmy=R.reduce((a,r)=>a+N(r.army),0);
+[["Nations shown",R.length,nPlayers+" human"],["Countries on the map",int(W.n_countries),""],
+ ["World population",(W.world_pop/1000).toFixed(1),"million"],
+ ["Locations held",int(R.reduce((a,r)=>a+r.locations,0)),"of "+int(W.world_locations)],
+ ["Standing armies",int(worldArmy*1000),"men"]
+].forEach(([k,v,s])=>{const d=el("div","fact"); d.appendChild(el("dt",null,k));
+  d.appendChild(el("dd",null,v+(s?' <small>'+s+'</small>':""))); $("facts").appendChild(d);});
+
+const FIELDS=D.fields||{}, CFG=D.config||{};
+const pct=v=>(N(v)*100).toFixed(0)+"%";
+const dash='<span class="zero">&mdash;</span>';
+/* Per-field rendering. Anything not listed falls back to a plain number. */
+const SPEC={
+  gp_rank:{cls:"gp",asc:true,bar:false,fmt:r=>r.gp_rank>900?"&ndash;":r.gp_rank},
+  tag:{cls:"l",asc:true,bar:false,nat:true},
+  _sp:{bar:false,spark:true},
+  pop:{fmt:r=>pop(r.pop)},
+  control:{fmt:r=>pct(r.control)}, control_wtd:{fmt:r=>pct(r.control_wtd)},
+  inflation:{fmt:r=>f2(r.inflation)+"%"},
+  debt:{bar:false,fmt:r=>r.debt?'<span class="warnv">'+int(r.debt)+'</span>':dash},
+  army:{fmt:r=>r.army?men(r.army):dash},
+  levies:{fmt:r=>r.levies?men(r.levies):dash},
+  regulars:{fmt:r=>r.regulars?men(r.regulars):dash},
+  mercs:{fmt:r=>r.mercs?men(r.mercs):dash},
+  navy:{fmt:r=>r.navy?men(r.navy):dash},
+  manpower:{fmt:r=>men(r.manpower)}, max_manpower:{fmt:r=>men(r.max_manpower)},
+  kills:{fmt:r=>r.kills?int(r.kills):dash},
+  war_battle:{fmt:r=>r.war_battle?int(r.war_battle):dash},
+  war_attrition:{fmt:r=>r.war_attrition?int(r.war_attrition):dash},
+  gold:{fmt:r=>int(r.gold)}, dev:{fmt:r=>int(r.dev)},
+  locations:{fmt:r=>r.locations}, provinces:{bar:false,fmt:r=>r.provinces},
+  subunits:{bar:false,fmt:r=>r.subunits}, advances:{bar:false,fmt:r=>r.advances},
+  wars:{bar:false,fmt:r=>r.wars}, rebels:{bar:false,fmt:r=>r.rebels},
+  score_place:{bar:false,asc:true,fmt:r=>"#"+int(r.score_place)}
+};
+const RANKED=new Set(["pop","taxbase","econbase","wealth","control","dev","locations",
+                      "gold","income","total_produced","trade_value","army","levies",
+                      "regulars","mercs","kills"]);
+function colSpec(k){
+  const base={k:k, t:FIELDS[k]||k, bar:true, fmt:r=>f1(r[k])};
+  const sp=SPEC[k]||{};
+  const c=Object.assign(base,sp);
+  if(RANKED.has(k)) c.rank=k;
+  return c;
+}
+const STORE="eu5cols";
+function savedCols(){
+  try{ const v=localStorage.getItem(STORE); if(v) return JSON.parse(v); }catch(e){}
+  return null;
+}
+let chosen=(savedCols()||CFG.standings||["gp_rank","tag","pop","taxbase","econbase",
+             "wealth","control","locations","levies","regulars","mercs"])
+           .filter(k=>k in FIELDS);
+if(!chosen.includes("tag")) chosen.unshift("tag");
+let COLS=chosen.map(colSpec);
+let sortKey="gp_rank", sortAsc=true;
+const max=k=>Math.max(...R.map(r=>N(r[k])));
+
+function sparkline(h,W0,H0){
+  if(!h||h.length<2) return '<span class="zero">&mdash;</span>';
+  const w=W0||76,ht=H0||22,p=2, lo=Math.min(...h), hi=Math.max(...h), sp=(hi-lo)||1;
+  const pts=h.map((v,i)=>[p+i*(w-2*p)/(h.length-1), ht-p-((v-lo)/sp)*(ht-2*p)]);
+  const dd=pts.map((q,i)=>(i?"L":"M")+q[0].toFixed(1)+" "+q[1].toFixed(1)).join(" ");
+  const last=pts[pts.length-1], up=h[h.length-1]>=h[0], col=up?"var(--verd)":"var(--alarm)";
+  return '<svg class="spark" width="'+w+'" height="'+ht+'" viewBox="0 0 '+w+' '+ht+'" aria-hidden="true">'
+   +'<path d="'+dd+'" fill="none" stroke="'+col+'" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>'
+   +'<circle cx="'+last[0].toFixed(1)+'" cy="'+last[1].toFixed(1)+'" r="2.2" fill="'+col+'"/></svg>';
+}
+
+function head(){
+  const tr=$("hrow"); tr.innerHTML="";
+  COLS.forEach(c=>{
+    const th=el("th",(c.cls==="l"||c.cls==="gp")?"l":null,c.t+'<span class="car">&#9660;</span>');
+    if(c.k===sortKey){th.setAttribute("aria-sort",sortAsc?"ascending":"descending");
+      th.querySelector(".car").innerHTML=sortAsc?"&#9650;":"&#9660;";}
+    th.tabIndex=0;
+    const go=()=>{ if(sortKey===c.k) sortAsc=!sortAsc; else {sortKey=c.k; sortAsc=!!c.asc;} render(); };
+    th.onclick=go; th.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
+    tr.appendChild(th);
+  });
+}
+
+function detailPanel(r){
+  const rk=k=>r.ranks[k]?'<b class="rank">'+ord(r.ranks[k])+' of '+int(W.n_countries)+'</b>':"";
+  const kv=(a,b,c)=>'<div class="kv"><span>'+a+'</span><b>'+b+'</b>'+(c||"")+'</div>';
+  const grp=(t,rows)=>'<div class="grp"><h4>'+t+'</h4>'+rows+'</div>';
+  const raw=Object.entries(r.raw).sort((a,b)=>b[1]-a[1]);
+  const goods=Object.entries(r.goods).sort((a,b)=>N(b[1])-N(a[1]));
+  const net=N(r.income)-N(r.expense);
+  return '<div class="panel"><div class="grid">'
+  + grp("Realm", kv("Population",pop(r.pop),rk("pop"))+kv("Locations",r.locations,rk("locations"))
+      +kv("Provinces",r.provinces)+kv("Development",int(r.dev),rk("dev"))
+      +kv("Tax base",f1(r.taxbase),rk("taxbase"))+kv("Economic base",f1(r.econbase),rk("econbase"))
+      +kv("Wealth, regardless of control",f1(r.wealth),rk("wealth"))
+      +kv("Average control",(N(r.control)*100).toFixed(1)+"%")
+      +kv("Control, development-weighted",(N(r.control_wtd)*100).toFixed(1)+"%"))
+  + grp("Treasury", kv("Wealth, gold on hand",int(r.gold),rk("gold"))+kv("Monthly income",f1(r.income))
+      +kv("Monthly expense",f1(r.expense))+kv("Net",(net>=0?"+":"")+f1(net))
+      +kv("Debt",r.debt?int(r.debt):"none")+kv("Loan capacity",int(r.loan_capacity))
+      +kv("Creditworthiness",f2(r.creditworthiness))+kv("Inflation",f2(r.inflation)+"%"))
+  + grp("Income by source", kv("Tax",f1(r.tax_income))
+      +kv("Trade, net",(N(r.trade_balance)>=0?"+":"")+f1(r.trade_balance))
+      +kv("Foreign buildings",f1(r.building_income))
+      +kv("Coin minting",f2(r.coin_minting))
+      +kv("Production &amp; other",f1(N(r.income)-N(r.tax_income)-N(r.trade_balance)-N(r.building_income)-N(r.coin_minting)))
+      +kv("<b style=\'font-weight:600\'>Total</b>",f1(r.income))
+      +'<div class="kv"><span style="font-size:11.5px;line-height:1.35">Diplomatic income is not recorded in EU5 saves.</span></div>')
+  + grp("Commerce", kv("Subject tax base",f1(r.subject_tax_base))
+      +kv("Trade value",f1(r.trade_value))
+      +kv("Goods produced",f1(r.total_produced),rk("produced")))
+  + grp("Arms", kv("Standing army",r.army?men(r.army)+" men":"none")
+      +kv("Navy",r.navy?men(r.navy)+" crew":"none")+kv("Regiments",r.subunits)
+      +kv("Manpower pool",men(r.max_manpower)+" men")+kv("Army tradition",f1(r.army_tradition))
+      +kv("Navy tradition",f1(r.navy_tradition))+kv("Men killed",int(r.kills),rk("kills")))
+  + grp("State", kv("Great power rank",r.gp_rank>900?"unranked":"#"+r.gp_rank)
+      +kv("Great power points",f1(r.gp_points))+kv("World score place",'#'+int(r.score_place))
+      +kv("ADM / DIP / MIL",f1(r.score.ADM)+" / "+f1(r.score.DIP)+" / "+f1(r.score.MIL))
+      +kv("Prestige",f1(r.prestige))+kv("Stability",f1(r.stability))
+      +kv("Government power",f1(r.govpower))+kv("Advances",r.advances))
+  + '<div class="grp"><h4>Population, last '+r.pop_hist.length+' months</h4>'
+      + '<div style="padding-top:4px">'+sparkline(r.pop_hist,150,40)+'</div>'
+      + '<div class="kv"><span>'+pop(r.pop_hist[0])+'</span><b>&rarr;</b><span>'+pop(r.pop_hist[r.pop_hist.length-1])+'</span></div></div>'
+  + grp("History", kv("Wars entered",r.wars)+kv("Rebellions",r.rebels)
+      +kv("Battle dead, live wars",r.war_battle?int(r.war_battle):"none")
+      +kv("Attrition dead, live wars",r.war_attrition?int(r.war_attrition):"none"))
+  + '<div class="grp full"><h4>Raw materials &mdash; '+raw.length+' goods across '+r.locations+' locations</h4><div class="chips">'
+      + raw.map(([g,n])=>'<span class="chip">'+esc(pretty(g))+'<b>'+n+'</b></span>').join("")+'</div></div>'
+  + '<div class="grp full"><h4>Monthly output by good &mdash; raw and worked, '+goods.length+' kinds</h4><div class="chips">'
+      + goods.map(([g,v])=>'<span class="chip">'+esc(pretty(g))+'<b>'+f1(v)+'</b></span>').join("")+'</div></div>'
+  + '</div></div>';
+}
+
+function render(){
+  head();
+  const tb=$("tb"); const open=new Set([...tb.querySelectorAll("tr.detail.open")].map(t=>t.dataset.id));
+  tb.innerHTML="";
+  const rows=[...R].sort((a,b)=>{
+    const x=a[sortKey],y=b[sortKey];
+    const c=(typeof x==="string")?String(x).localeCompare(String(y)):N(x)-N(y);
+    return sortAsc?c:-c;
+  });
+  rows.forEach(r=>{
+    const tr=el("tr","row"); tr.dataset.id=r.id; tr.tabIndex=0;
+    COLS.forEach(c=>{
+      const td=el("td",c.cls==="gp"?"gp"+(r.gp_rank<=5?" top":""):(c.cls||"")+(c.nat?"":" num"));
+      if(c.nat){
+        td.className="l";
+        const who=r.is_player?esc(r.player):'<span class="ai">AI</span>';
+        const fl=r.flag?'<img class="flag" src="'+esc(r.flag)+'" alt="'+esc(r.tag)+' coat of arms">'
+                       :'<span class="flag ph"></span>';
+        td.innerHTML='<div class="nat">'+fl+'<span class="tag">'+esc(r.tag)+'</span>'
+          +'<span><span class="natname">'+esc(r.name)+'</span><br><span class="player">'+who+'</span></span></div>';
+      } else if(c.spark){ td.innerHTML=sparkline(r.pop_hist);
+      } else {
+        let h=c.fmt(r);
+        if(c.bar && N(r[c.k])>0){const m=max(c.k); const w=m?Math.max(2,N(r[c.k])/m*100):0;
+          h+='<span class="bar" style="width:'+w.toFixed(1)+'%"></span>';}
+        td.innerHTML=h;
+      }
+      tr.appendChild(td);
+    });
+    const dtr=el("tr","detail"+(open.has(r.id)?" open":"")); dtr.dataset.id=r.id;
+    const dtd=el("td"); dtd.colSpan=COLS.length; dtd.innerHTML=detailPanel(r); dtr.appendChild(dtd);
+    const tog=()=>dtr.classList.toggle("open");
+    tr.onclick=tog; tr.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();tog();}};
+    tb.appendChild(tr); tb.appendChild(dtr);
+  });
+  lastOrder=rows;
+  if(typeof refreshDiscord==="function") refreshDiscord();
+}
+render();
+
+(function(){
+  const s=$("sc"), W0=780,H0=440, L=58,Rr=26,T=44,B=54;
+  const xMax=Math.max(50,Math.ceil(Math.max(...R.map(r=>r.locations))/50)*50+20);
+  const yMax=Math.max(50,Math.ceil(Math.max(...R.map(r=>r.taxbase))/50)*50);
+  const px=v=>L+(v/xMax)*(W0-L-Rr), py=v=>H0-B-(v/yMax)*(H0-T-B);
+  const step=yMax>400?100:50;
+  let g='';
+  for(let v=0;v<=yMax;v+=step){
+    g+='<line x1="'+L+'" y1="'+py(v)+'" x2="'+(W0-Rr)+'" y2="'+py(v)+'" stroke="var(--line-soft)" stroke-width="1"/>'
+      +'<text x="'+(L-10)+'" y="'+(py(v)+4)+'" text-anchor="end" font-size="11" font-family="IBM Plex Mono,monospace" fill="var(--ink-3)">'+v+'</text>';
+  }
+  for(let v=0;v<=xMax;v+=50)
+    g+='<text x="'+px(v)+'" y="'+(H0-B+20)+'" text-anchor="middle" font-size="11" font-family="IBM Plex Mono,monospace" fill="var(--ink-3)">'+v+'</text>';
+  const totL=R.reduce((a,r)=>a+r.locations,0)||1;
+  const avg=R.reduce((a,r)=>a+r.taxbase,0)/totL;
+  g+='<line x1="'+px(0)+'" y1="'+py(0)+'" x2="'+px(xMax)+'" y2="'+py(Math.min(yMax,avg*xMax))+'" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="3 4" opacity=".65"/>';
+  g+='<line x1="'+L+'" y1="'+(H0-B)+'" x2="'+(W0-Rr)+'" y2="'+(H0-B)+'" stroke="var(--line)" stroke-width="1"/>';
+  g+='<text x="'+L+'" y="'+(H0-10)+'" font-size="11" font-family="Archivo,sans-serif" font-weight="600" fill="var(--ink-3)" letter-spacing="1.4">LOCATIONS OWNED</text>';
+  g+='<text x="'+(L-46)+'" y="20" font-size="11" font-family="Archivo,sans-serif" font-weight="600" fill="var(--ink-3)" letter-spacing="1.4">TAX BASE</text>';
+  const placed={L:[],R:[]};
+  [...R].sort((a,b)=>a.taxbase-b.taxbase).forEach(r=>{
+    const x=px(r.locations), y=py(r.taxbase);
+    let right=x<W0*0.72, side=right?"R":"L", ly=y+4, guard=0;
+    const clash=(sd,v)=>placed[sd].some(u=>Math.abs(u-v)<13);
+    if(clash(side,ly)){
+      const other=right?"L":"R";
+      if(!clash(other,ly)){ right=!right; side=other; }
+      else { while(clash(side,ly)&&guard++<8) ly+=13; }
+    }
+    placed[side].push(ly);
+    g+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="5.5" fill="var(--verd)" stroke="var(--surface)" stroke-width="2"/>';
+    g+='<text x="'+(right?x+12:x-12).toFixed(1)+'" y="'+ly.toFixed(1)+'" text-anchor="'+(right?"start":"end")+'" font-size="12.5" font-family="IBM Plex Mono,monospace" font-weight="600" fill="var(--ink-2)">'+esc(r.tag)+'</text>';
+  });
+  $("avgv").textContent=avg.toFixed(2);
+  s.innerHTML=g;
+})();
+
+/* ---- column picker: tweak without re-running the script ---- */
+(function(){
+  const panel=$("colpanel"), btn=$("colbtn");
+  const order=Object.keys(FIELDS);
+  function build(){
+    panel.innerHTML="";
+    order.forEach(k=>{
+      const id="col_"+k;
+      const lab=el("label"); lab.htmlFor=id;
+      const cb=el("input"); cb.type="checkbox"; cb.id=id; cb.checked=chosen.includes(k);
+      cb.disabled=(k==="tag");
+      cb.onchange=()=>{
+        chosen = order.filter(x => x===k ? cb.checked : chosen.includes(x));
+        if(!chosen.includes("tag")) chosen.unshift("tag");
+        COLS=chosen.map(colSpec);
+        if(!chosen.includes(sortKey)) { sortKey=chosen.includes("gp_rank")?"gp_rank":"tag"; sortAsc=true; }
+        try{ localStorage.setItem(STORE, JSON.stringify(chosen)); }catch(e){}
+        render();
+      };
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(FIELDS[k]));
+      panel.appendChild(lab);
+    });
+    const foot=el("div","colfoot");
+    const reset=el("button","btn","Reset to defaults"); reset.type="button";
+    reset.onclick=()=>{
+      try{ localStorage.removeItem(STORE); }catch(e){}
+      chosen=(CFG.standings||[]).filter(k=>k in FIELDS);
+      if(!chosen.includes("tag")) chosen.unshift("tag");
+      COLS=chosen.map(colSpec); sortKey=chosen.includes("gp_rank")?"gp_rank":"tag"; sortAsc=true;
+      build(); render();
+    };
+    foot.appendChild(reset);
+    foot.appendChild(el("span",null,"Saved in this browser."));
+    panel.appendChild(foot);
+  }
+  build();
+  btn.onclick=()=>{ panel.hidden=!panel.hidden; btn.classList.toggle("ok",!panel.hidden); };
+})();
+
+/* ---- Discord summary: fixed-width, follows the current sort AND whichever
+   columns are currently checked in the Columns picker above the table ---- */
+var lastOrder=R;
+const thin=(v,n)=>{v=String(v); return v.length<=n?v:v.slice(0,n-1)+"…";};
+const deent=s=>String(s).replace(/<[^>]*>/g,"").replace(/&mdash;|&ndash;/g,"-")
+  .replace(/&amp;/g,"&").replace(/&rarr;/g,"->").trim();
+/* Turn the live COLS (the standings table's current, visible column set)
+   into flat, plain-text Discord columns. "tag" (flag+name+player) becomes
+   two text columns; the population sparkline has no text form and is skipped. */
+function discordCols(){
+  const out=[];
+  COLS.forEach(c=>{
+    if(c.k==="_sp") return;
+    if(c.k==="tag"){
+      out.push({h:"NATION",left:true,v:r=>r.name});
+      out.push({h:"PLAYER",left:true,v:r=>r.is_player?r.player:"AI"});
+      return;
+    }
+    out.push({h:String(c.t||c.k).toUpperCase(),left:false,v:r=>deent(c.fmt(r))});
+  });
+  return out;
+}
+function discordText(){
+  const cols=discordCols();
+  let cells=lastOrder.map(r=>cols.map(c=>c.v(r)));
+  const widthOf=i=>Math.min(22,Math.max(cols[i].h.length,...cells.map(row=>row[i].length)));
+  let widths=cols.map((c,i)=>widthOf(i));
+  const row=vals=>vals.map((v,i)=>{
+    const w=widths[i], t=thin(v,w);
+    return cols[i].left?t.padEnd(w):t.padStart(w);
+  }).join("  ").replace(/\s+$/,"");
+  const head="**"+W.date+" — "+nPlayers+" player nations**  ·  EU5 "+W.version+
+             "  ·  world pop "+(W.world_pop/1000).toFixed(1)+"M";
+  const body=[row(cols.map(c=>c.h))];
+  cells.forEach(vals=>body.push(row(vals)));
+  const best=(k,fmt)=>{const b=[...R].sort((a,c)=>N(c[k])-N(a[k]))[0]; return b.name+" ("+fmt(b)+")";};
+  const tall=[...R].sort((a,b)=>(b.taxbase/(b.locations||1))-(a.taxbase/(a.locations||1)))[0];
+  const notes=[
+    "Widest: "+best("locations",b=>b.locations+" locations"),
+    "Tallest: "+tall.name+" ("+(tall.taxbase/(tall.locations||1)).toFixed(2)+" tax/location)",
+    "Richest: "+best("gold",b=>int(b.gold)+"g"),
+    "Biggest economy: "+best("econbase",b=>f1(b.econbase)+" econ base"),
+    "Best controlled: "+best("control",b=>Math.round(N(b.control)*100)+"% control"),
+    "Largest army: "+best("army",b=>men(b.army)+" men"),
+    "Most kills: "+best("kills",b=>int(b.kills))
+  ];
+  const deep=[...R].sort((a,b)=>N(b.debt)-N(a.debt))[0];
+  if(N(deep.debt)>0) notes.push("Deepest debt: "+deep.name+" ("+int(deep.debt)+")");
+  let txt=head+"\n```\n"+body.join("\n")+"\n```\n**Notables**  ·  "+notes.join("  ·  ");
+  while(txt.length>1900 && body.length>2){
+    body.pop();
+    txt=head+"\n```\n"+body.join("\n")+"\n(truncated to fit Discord's limit)\n```\n**Notables**  ·  "+notes.join("  ·  ");
+  }
+  return txt;
+}
+function refreshDiscord(){ try{ const t=$("dtext"); if(t) t.value=discordText(); }catch(e){} }
+$("copybtn").onclick=function(){
+  const txt=discordText(), btn=this;
+  const done=ok=>{ btn.textContent=ok?"Copied":"Press ⌘/Ctrl+C"; btn.classList.toggle("ok",ok);
+    setTimeout(()=>{btn.textContent="Copy for Discord"; btn.classList.remove("ok");},2200); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(()=>done(true)).catch(()=>{ select(); done(false); });
+  } else { select(); done(false); }
+  function select(){
+    const d=$("dtext").closest("details"); d.open=true;
+    const t=$("dtext"); t.value=txt; t.focus(); t.select();
+  }
+};
+refreshDiscord();
+
+/* ---- map + ledger Discord copy: nation/location table from the map's own
+   legend, plus the blood ledger table, so a war recap doesn't need the
+   image itself (Discord can't render the map from pasted text anyway). ---- */
+if(D.map){
+  const txtTable=(cols,rows)=>{
+    const cells=rows.map(r=>cols.map(c=>c.v(r)));
+    const widths=cols.map((c,i)=>Math.min(22,Math.max(c.h.length,...cells.map(row=>row[i].length))));
+    const line=vals=>vals.map((v,i)=>{const w=widths[i],t=thin(v,w);
+      return cols[i].left?t.padEnd(w):t.padStart(w);}).join("  ").replace(/\s+$/,"");
+    return [line(cols.map(c=>c.h))].concat(cells.map(line)).join("\n");
+  };
+  const mapCols=[
+    {h:"NATION",left:true,v:m=>m.name},
+    {h:"PLAYER",left:true,v:m=>m.is_player?(m.player||"AI"):"AI"},
+    {h:"LOC",left:false,v:m=>String(m.locations||0)}
+  ];
+  const ledgerCols=()=>{
+    let keys=(CFG.ledger||["tag","kills","war_battle","war_attrition","wars","rebels",
+              "army_tradition"]).filter(k=>k in FIELDS);
+    if(!keys.includes("tag")) keys.unshift("tag");
+    return keys.map(k=>k==="tag"
+      ? {h:"NATION",left:true,v:r=>r.name}
+      : (sp=>({h:String(sp.t||k).toUpperCase(),left:false,v:r=>deent(String(sp.fmt(r)))}))(colSpec(k)));
+  };
+  const mapDiscordText=()=>{
+    const legRows=[...D.map.legend].sort((a,b)=>(b.locations||0)-(a.locations||0));
+    const ledgerRows=[...R].sort((a,b)=>N(b.kills)-N(a.kills));
+    const head="**"+W.date+" — political map & blood ledger**  ·  EU5 "+W.version;
+    return head+"\n**Nations on the map**\n```\n"+txtTable(mapCols,legRows)+"\n```\n"+
+      "**Blood ledger**\n```\n"+txtTable(ledgerCols(),ledgerRows)+"\n```";
+  };
+  const mbtn=$("mapcopybtn"), mtext=$("mapdtext");
+  if(mtext) mtext.value=mapDiscordText();
+  if(mbtn) mbtn.onclick=function(){
+    const txt=mapDiscordText(), btn=this;
+    const done=ok=>{ btn.textContent=ok?"Copied":"Press ⌘/Ctrl+C"; btn.classList.toggle("ok",ok);
+      setTimeout(()=>{btn.textContent="Copy for Discord (with ledger)"; btn.classList.remove("ok");},2200); };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(()=>done(true)).catch(()=>{ select(); done(false); });
+    } else { select(); done(false); }
+    function select(){
+      const d=$("mapdtext").closest("details"); d.open=true;
+      const t=$("mapdtext"); t.value=txt; t.focus(); t.select();
+    }
+  };
+}
+
+/* ---- goods matrix: sortable by any column ---- */
+(function(){
+  const cols=[...R].sort((a,b)=>a.gp_rank-b.gp_rank);
+  const tot={}; R.forEach(r=>Object.entries(r.raw).forEach(([g,n])=>tot[g]=(tot[g]||0)+n));
+  const goods=Object.keys(tot);
+  const mx=Math.max(1,...R.flatMap(r=>Object.values(r.raw)),1);
+  let key="all", asc=false;
+  const valOf=(g,k)=> k==="good" ? pretty(g) : k==="all" ? tot[g] : (cols.find(c=>c.tag===k).raw[g]||0);
+  function draw(){
+    const sorted=[...goods].sort((a,b)=>{
+      const x=valOf(a,key), y=valOf(b,key);
+      let c = (typeof x==="string") ? x.localeCompare(y) : x-y;
+      if(c===0) c = tot[b]-tot[a];
+      return asc?c:-c;
+    });
+    const th=(k,label,cls,style)=>'<th'+(cls?' class="'+cls+'"':'')+(style||'')
+      +' tabindex="0" data-k="'+k+'"'+(k===key?' aria-sort="'+(asc?"ascending":"descending")+'"':'')
+      +'>'+label+'<span class="car">'+(k===key?(asc?"&#9650;":"&#9660;"):"&#9660;")+'</span></th>';
+    let h='<thead><tr>'+th("good","Raw material","l",' style="text-align:left"');
+    cols.forEach(r=>h+=th(esc(r.tag),esc(r.tag)));
+    h+=th("all","All")+'</tr></thead><tbody>';
+    sorted.forEach(g=>{
+      h+='<tr><th class="good">'+esc(pretty(g))+'</th>';
+      cols.forEach(r=>{
+        const n=r.raw[g]||0;
+        const a=n?Math.round((0.10+0.72*Math.sqrt(n/mx))*100):0;
+        h+='<td'+(n?' style="background:color-mix(in srgb, var(--accent) '+a+'%, transparent)"':'')
+          +'><span class="cell'+(n?'':' e')+'">'+(n||'&middot;')+'</span></td>';
+      });
+      h+='<td><span class="cell tot">'+tot[g]+'</span></td></tr>';
+    });
+    const t=$("mat"); t.innerHTML=h+'</tbody>';
+    t.querySelectorAll("thead th").forEach(el=>{
+      const go=()=>{ const k=el.dataset.k;
+        if(k===key) asc=!asc; else { key=k; asc=(k==="good"); }
+        draw(); };
+      el.onclick=go; el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
+    });
+  }
+  draw();
+})();
+
+/* ---- blood ledger: sortable ---- */
+(function(){
+  const d=v=>v?int(v):'<span class="zero">&mdash;</span>';
+  let keys=(CFG.ledger||["tag","kills","war_battle","war_attrition","wars","rebels",
+            "army_tradition"]).filter(k=>k in FIELDS);
+  if(!keys.includes("tag")) keys.unshift("tag");
+  const C=keys.map(k=>{
+    const sp=colSpec(k);
+    return {k:k, t:sp.t, cls:(k==="tag"?"l":""), nat:(k==="tag"), f:sp.fmt};
+  });
+  let key=keys.includes("kills")?"kills":keys[1]||"tag", asc=false;
+  function draw(){
+    const rows=[...R].sort((a,b)=>{
+      const x=a[key],y=b[key];
+      const c=(typeof x==="string")?String(x).localeCompare(String(y)):N(x)-N(y);
+      return asc?c:-c;
+    });
+    let h='<thead><tr>';
+    C.forEach(c=>{
+      h+='<th'+(c.cls==="l"?' class="l"':'')+' tabindex="0" data-k="'+c.k+'"'
+       +(c.k===key?' aria-sort="'+(asc?"ascending":"descending")+'"':'')+'>'+c.t
+       +'<span class="car">'+(c.k===key?(asc?"&#9650;":"&#9660;"):"&#9660;")+'</span></th>';
+    });
+    h+='</tr></thead><tbody>';
+    rows.forEach(r=>{
+      const fl=r.flag?'<img class="flag" src="'+esc(r.flag)+'" alt="">':'<span class="flag ph"></span>';
+      h+='<tr class="row" style="cursor:default"><td class="l"><div class="nat">'+fl
+       +'<span class="tag">'+esc(r.tag)+'</span><span class="natname">'+esc(r.name)+'</span></div></td>';
+      C.slice(1).forEach(c=>h+='<td class="num">'+c.f(r)+'</td>');
+      h+='</tr>';
+    });
+    const t=$("war"); t.innerHTML=h+'</tbody>';
+    t.querySelectorAll("thead th").forEach(el=>{
+      const go=()=>{ const k=el.dataset.k;
+        if(k===key) asc=!asc; else { key=k; asc=(k==="tag"); }
+        draw(); };
+      el.onclick=go; el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
+    });
+  }
+  draw();
+})();
+</script>
