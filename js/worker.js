@@ -190,43 +190,16 @@ function num(x, dflt = 0.0) {
 }
 
 // ==========================================================================
-// Game files: either a FileSystemDirectoryHandle for the install's `game`
-// folder, or a {relative path -> File} map from a folder <input>.
-// Paths here are relative to that `game` folder.
+// Game files: a {relative path -> File} map from a folder <input>, with
+// paths relative to the install's `game` folder.
 // ==========================================================================
 class GameFS {
   constructor(src) {
-    this.kind = src.kind;
-    this.handle = src.handle || null;
-    this.files = src.files || null;
+    this.files = src.files;
     this.label = src.label || "your EU5 install";
-    this._dirs = new Map();
-  }
-  async _dir(parts) {
-    const key = parts.join("/");
-    if (this._dirs.has(key)) return this._dirs.get(key);
-    let h = this.handle;
-    try {
-      for (const p of parts) h = await h.getDirectoryHandle(p);
-    } catch (e) {
-      h = null;
-    }
-    this._dirs.set(key, h);
-    return h;
   }
   async file(rel) {
-    const parts = rel.split("/").filter(Boolean);
-    const name = parts.pop();
-    if (!name) return null;
-    if (this.kind === "files") return this.files.get(rel) || null;
-    const d = await this._dir(parts);
-    if (!d) return null;
-    try {
-      const fh = await d.getFileHandle(name);
-      return await fh.getFile();
-    } catch (e) {
-      return null;
-    }
+    return this.files.get(rel) || null;
   }
   async text(rel) {
     const f = await this.file(rel);
@@ -236,23 +209,16 @@ class GameFS {
   }
   /* file names (not subfolders) directly inside rel, or null if missing */
   async list(rel) {
-    if (this.kind === "files") {
-      const pre = rel.replace(/\/?$/, "/");
-      let found = false;
-      const out = [];
-      for (const k of this.files.keys()) {
-        if (!k.startsWith(pre)) continue;
-        found = true;
-        const rest = k.slice(pre.length);
-        if (!rest.includes("/")) out.push(rest);
-      }
-      return found ? out : null;
-    }
-    const d = await this._dir(rel.split("/").filter(Boolean));
-    if (!d) return null;
+    const pre = rel.replace(/\/?$/, "/");
+    let found = false;
     const out = [];
-    for await (const [name, h] of d.entries()) if (h.kind === "file") out.push(name);
-    return out;
+    for (const k of this.files.keys()) {
+      if (!k.startsWith(pre)) continue;
+      found = true;
+      const rest = k.slice(pre.length);
+      if (!rest.includes("/")) out.push(rest);
+    }
+    return found ? out : null;
   }
 }
 const pySort = (arr) => arr.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));

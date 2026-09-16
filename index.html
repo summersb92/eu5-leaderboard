@@ -35,16 +35,18 @@
 
       <div class="step" id="step-game">
         <div class="stephead"><span class="stepno">2</span><h2>Your EU&nbsp;V install</h2><span class="opt">optional</span></div>
-        <p class="note">Coats of arms and the map are drawn from the game's own files. Point this at the
-          folder the game is installed in &mdash; nothing is copied or sent anywhere.</p>
+        <p class="note">Coats of arms and the map are drawn from the game's own files. Pick the
+          <code>game</code> folder inside your EU&nbsp;V install &mdash; nothing is copied or sent anywhere.</p>
         <div class="gamerow">
           <button class="btn primary" id="gamebtn" type="button">Choose game folder</button>
           <span class="gamestatus" id="gamestatus">Not linked</span>
           <button class="btn quiet" id="gameforget" type="button" hidden>Forget</button>
         </div>
         <input type="file" id="gameinput" webkitdirectory directory multiple hidden>
-        <p class="hint">Steam's default is <code class="path">C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis V</code>
-          &mdash; in Steam, right-click the game &rarr; <em>Manage</em> &rarr; <em>Browse local files</em> to find yours.</p>
+        <p class="hint">Steam's default is <code class="path">C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis V\game</code>
+          &mdash; in Steam, right-click the game &rarr; <em>Manage</em> &rarr; <em>Browse local files</em> to find yours.
+          Chrome will ask whether to &ldquo;upload&rdquo; the folder's files: that's its standard wording for letting
+          a page read them, and nothing leaves your computer.</p>
         <div class="opts">
           <label><input type="checkbox" id="optflags" checked> Coats of arms</label>
           <label><input type="checkbox" id="optmap" checked> Political map</label>
@@ -97,8 +99,12 @@
           the report is built on your machine. Close the tab and it's gone. The only network requests are
           for this page itself and its fonts.</p></details>
       <details><summary>Which browsers work?</summary>
-        <p>Any current Chrome, Edge, Firefox or Safari. Chrome and Edge also remember the linked game
-          folder between visits; other browsers ask for it each time.</p></details>
+        <p>Any current Chrome, Edge, Firefox or Safari. The game folder is linked for the current visit
+          only, so you'll pick it again next time.</p></details>
+      <details><summary>Why does Chrome say it will upload files?</summary>
+        <p>Choosing a folder in a web page always shows that prompt in Chrome, even when, as here, the page
+          only reads a few files locally. You can check: this page makes no network requests while building
+          a report (open your browser's developer tools &rarr; Network).</p></details>
       <details><summary>What can I do with the report?</summary>
         <p><em>Download report</em> saves one self-contained HTML file you can send to anyone &mdash; it opens
           in any browser with nothing to install. <em>Download data</em> saves the extracted numbers as JSON;

@@ -127,140 +127,52 @@ function sanitizeData(d) {
 // ==========================================================================
 // Game folder linking
 // ==========================================================================
+// Chrome's directory picker refuses anything under Program Files (where
+// Steam installs by default) and reports it as a plain cancel, so the game
+// folder always comes in through a folder <input>. The browser only lists
+// the files; the few we need are read locally when a report is built.
 const NEEDED = ["main_menu/common/named_colors/", "main_menu/common/coat_of_arms/coat_of_arms/",
   "main_menu/gfx/coat_of_arms/", "in_game/map_data/", "in_game/setup/countries/"];
-const canPickDir = typeof window.showDirectoryPicker === "function";
-let game = null; // {kind:"handle", handle, label} | {kind:"files", files, label}
+let game = null; // {files: Map(relative path -> File), label}
 
-const idb = {
-  open() {
-    return new Promise((res, rej) => {
-      const r = indexedDB.open("eu5-leaderboard", 1);
-      r.onupgradeneeded = () => r.result.createObjectStore("kv");
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-  },
-  async run(mode, fn) {
-    const db = await this.open();
-    return new Promise((res, rej) => {
-      const tx = db.transaction("kv", mode);
-      const req = fn(tx.objectStore("kv"));
-      tx.oncomplete = () => res(req && req.result);
-      tx.onerror = () => rej(tx.error);
-    });
-  },
-  get(k) { return this.run("readonly", (s) => s.get(k)).catch(() => undefined); },
-  set(k, v) { return this.run("readwrite", (s) => s.put(v, k)).catch(() => {}); },
-  del(k) { return this.run("readwrite", (s) => s.delete(k)).catch(() => {}); },
-};
-
-async function childDir(h, name) {
-  try { return await h.getDirectoryHandle(name); } catch (e) { return null; }
-}
-
-/* Accept the install folder itself, or its `game` folder. */
-async function resolveGameHandle(h) {
-  const g = await childDir(h, "game");
-  if (g && (await childDir(g, "main_menu"))) return g;
-  if ((await childDir(h, "main_menu")) && (await childDir(h, "in_game"))) return h;
-  return null;
-}
-
-function setGameStatus(text, ok, forget) {
+function setGameStatus(text, ok) {
   const s = $("gamestatus");
   s.textContent = text;
   s.classList.toggle("ok", !!ok);
-  $("gameforget").hidden = !forget;
+  $("gameforget").hidden = !ok;
+  $("gamebtn").textContent = ok ? "Change folder" : "Choose game folder";
 }
 
-async function linkHandle(h, remember) {
-  const g = await resolveGameHandle(h);
-  if (!g) {
-    setGameStatus(`“${h.name}” isn't the EU5 install folder — pick the one named Europa Universalis V.`);
-    return false;
-  }
-  game = { kind: "handle", handle: g, label: h.name };
-  if (remember) await idb.set("gameDir", h);
-  setGameStatus(`Linked: ${h.name}`, true, true);
-  $("gamebtn").textContent = "Change folder";
-  return true;
-}
-
-let pendingHandle = null;
-async function restoreGame() {
-  if (!canPickDir) return;
-  const h = await idb.get("gameDir");
-  if (!h || typeof h.queryPermission !== "function") return;
-  const perm = await h.queryPermission({ mode: "read" }).catch(() => "denied");
-  if (perm === "granted") {
-    await linkHandle(h, false);
-  } else {
-    pendingHandle = h;
-    setGameStatus(`Remembered: ${h.name} — click to reconnect`, false, true);
-    $("gamebtn").textContent = "Reconnect";
-  }
-}
-
-async function pickGame() {
-  if (pendingHandle) {
-    const h = pendingHandle;
-    const perm = await h.requestPermission({ mode: "read" }).catch(() => "denied");
-    if (perm === "granted") {
-      pendingHandle = null;
-      if (await linkHandle(h, false)) maybeRebuild();
-      return;
-    }
-  }
-  if (!canPickDir) {
-    $("gameinput").click();
-    return;
-  }
-  let h;
-  try {
-    h = await window.showDirectoryPicker({ id: "eu5-install", mode: "read" });
-  } catch (e) {
-    if (e && e.name !== "AbortError") setGameStatus("Couldn't open that folder: " + e.message);
-    return;
-  }
-  pendingHandle = null;
-  if (await linkHandle(h, true)) maybeRebuild();
-}
-
+/* Accepts the install folder, its `game` folder, or anything in between -
+   paths are anchored on the main_menu/in_game layout. */
 function linkFileList(list) {
-  const files = new Map();
-  let prefix = null, top = "";
+  let prefix = null;
   for (const f of list) {
-    const p = f.webkitRelativePath || f.name;
-    if (prefix === null) {
-      const at = p.indexOf("main_menu/common/coat_of_arms/");
-      if (at >= 0) { prefix = p.slice(0, at); top = p.split("/")[0]; }
-    }
+    const p = f.webkitRelativePath || "";
+    const at = p.indexOf("main_menu/common/coat_of_arms/");
+    if (at >= 0) { prefix = p.slice(0, at); break; }
   }
   if (prefix === null) {
-    setGameStatus("That folder doesn't contain the game's files — pick the one named Europa Universalis V.");
+    setGameStatus("That folder doesn't contain the game's files — pick Europa Universalis V, or the game folder inside it.");
     return;
   }
+  const files = new Map();
   for (const f of list) {
     const p = f.webkitRelativePath;
     if (!p.startsWith(prefix)) continue;
     const rel = p.slice(prefix.length);
     if (NEEDED.some((n) => rel.startsWith(n))) files.set(rel, f);
   }
-  game = { kind: "files", files, label: top };
-  setGameStatus(`Linked: ${top} (for this visit)`, true, true);
-  $("gamebtn").textContent = "Change folder";
+  const label = prefix.split("/")[0];
+  game = { files, label };
+  setGameStatus(`Linked: ${label}`, true);
   maybeRebuild();
 }
 
-async function forgetGame() {
+function forgetGame() {
   game = null;
-  pendingHandle = null;
-  await idb.del("gameDir");
   setGameStatus("Not linked");
-  $("gamebtn").textContent = "Choose game folder";
 }
-
 // ==========================================================================
 // Running a build
 // ==========================================================================
@@ -442,15 +354,12 @@ function init() {
     if (e.dataTransfer && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
   });
 
-  $("gamebtn").addEventListener("click", pickGame);
+  $("gamebtn").addEventListener("click", () => $("gameinput").click());
   $("gameforget").addEventListener("click", forgetGame);
   $("gameinput").addEventListener("change", (e) => {
     if (e.target.files.length) linkFileList(e.target.files);
     e.target.value = "";
   });
-  if (!canPickDir) {
-    $("gamebtn").title = "Your browser will list the folder's files; nothing is uploaded.";
-  }
 
   $("rebuild").addEventListener("click", () => lastSave && build(lastSave));
   $("dlhtml").addEventListener("click", () => current &&
@@ -464,7 +373,6 @@ function init() {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   });
 
-  restoreGame();
   loadTemplate().catch(() => {});
 }
 
