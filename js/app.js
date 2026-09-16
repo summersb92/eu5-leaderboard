@@ -22,7 +22,7 @@ const FIELDS = {
   max_manpower: "Manpower pool", army_tradition: "Army trad.",
   navy_tradition: "Navy trad.", kills: "Killed", war_battle: "Battle dead",
   war_attrition: "Attrition dead", wars: "Wars", rebels: "Rebellions",
-  advances: "Advances", prestige: "Prestige", stability: "Stability",
+  advances: "Advances", advances_gained: "Adv. gained", prestige: "Prestige", stability: "Stability",
   govpower: "Gov. power", gp_points: "GP points", score_place: "World rank",
   _sp: "Pop trend",
 };
@@ -128,7 +128,8 @@ function sanitizeData(d) {
 // remembered - or reached through a junction outside Program Files, which
 // can. Either way only the few files we need are read, locally.
 const NEEDED = ["main_menu/common/named_colors/", "main_menu/common/coat_of_arms/coat_of_arms/",
-  "main_menu/gfx/coat_of_arms/", "in_game/map_data/", "in_game/setup/countries/"];
+  "main_menu/gfx/coat_of_arms/", "in_game/map_data/", "in_game/setup/countries/",
+  "in_game/common/advances/"];
 const canPickDir = typeof window.showDirectoryPicker === "function";
 let game = null; // {files: Map(relative path -> File), label}
 let savedHandle = null; // remembered folder still waiting for permission

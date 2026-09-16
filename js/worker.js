@@ -59,6 +59,53 @@ const NAMES = {
 // Fixed-point divisor for country script variables.
 const VAR_SCALE = 100000.0;
 
+// Age-of-traditions advances a country starts with when their
+// starting_technology_level is at or below its own (1.3.11 values; the
+// game's files replace this when an install is linked).
+const STARTING_ADVANCES = {
+  written_alphabet: 2, cultural_traditions_law_advance: 2, cultural_acceptance_advance: 3,
+  codified_laws: 2, agriculture_advance: 1, alchemy_advance: 3, ranching: 1,
+  horse_riding_advance: 1, trade_caravans: 1, mining_advance: 1, mining_law_advance: 1,
+  iron_working: 1, ship_building_advance: 2, trade_advance_age_of_trad: 3,
+  more_merchants_age_of_trad: 3, organized_religion: 4, castle_advance: 3,
+  unlock_traditional_galley_advance: 2, unlock_cog_advance: 3, nomadic_tendencies: 4,
+  three_sisters: 1, medicinal_infusions: 2, system_of_tributaries: 4, valley_irrigation: 4,
+};
+
+async function loadStartingAdvances(fs) {
+  const dir = "in_game/common/advances";
+  const names = await fs.list(dir);
+  if (!names) return null;
+  const out = {};
+  for (const fn of pySort(names)) {
+    if (!fn.endsWith(".txt")) continue;
+    const txt = await fs.text(dir + "/" + fn);
+    if (txt == null) continue;
+    const clean = txt.replace(/#[^\n]*/g, "");
+    for (const m of clean.matchAll(/^(\w+)\s*=\s*\{([\s\S]*?)^\}/gm)) {
+      if (!/\bage\s*=\s*age_1_traditions\b/.test(m[2])) continue;
+      const s = m[2].match(/\bstarting_technology_level\s*=\s*(\d+)/);
+      if (s) out[m[1]] = parseInt(s[1], 10);
+    }
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/* Advances gained since the start: everything researched, minus the ones a
+   country of its starting technology level begins the game with. The save
+   keeps no research dates, so this is the only baseline available. */
+function attachAdvanceGains(rows, table) {
+  for (const r of rows) {
+    const done = r._researched, level = r._startLevel;
+    delete r._researched;
+    delete r._startLevel;
+    if (!done || level == null) continue;
+    const start = done.filter((a) => a in table && table[a] <= level).length;
+    r.advances_start = start;
+    r.advances_gained = done.length - start;
+  }
+}
+
 // ==========================================================================
 // Python-compatibility helpers
 // ==========================================================================
@@ -1195,7 +1242,7 @@ async function extract(save, sections, topAi = 0) {
     "last_months_population last_months_tax_income last_months_subject_tax " +
     "last_months_foreign_building_income monthly_trade_balance " +
     "monthly_trade_value last_month_gold_income " +
-    "total_produced max_manpower max_sailors").split(" ");
+    "total_produced max_manpower max_sailors researched_advances starting_technology_level").split(" ");
   const BLK = ("score currency_data economy counters last_month_produced historical_population " +
     "historical_tax_base historical_economical_base owned_locations provinces " +
     "variables").split(" ");
@@ -1434,6 +1481,9 @@ async function extract(save, sections, topAi = 0) {
       trade_balance: num(get(c, "monthly_trade_balance")),
       total_produced: num(get(c, "total_produced")),
       locations: Math.trunc(get(c, "n_owned") || 0), provinces: Math.trunc(get(c, "n_prov") || 0),
+      _researched: isDict(get(c, "researched_advances"))
+        ? [...get(c, "researched_advances")].filter(([k, v]) => v === "yes").map(([k]) => k) : null,
+      _startLevel: c.has("starting_technology_level") ? num(get(c, "starting_technology_level"), null) : null,
       advances: Math.trunc(num(get(ct, "Advances"))), wars: Math.trunc(num(get(ct, "Wars"))),
       rebels: Math.trunc(num(get(ct, "Rebels"))),
       gp_rank: Math.trunc(num(get(c, "great_power_rank"), 999)),
@@ -1500,6 +1550,7 @@ self.onmessage = async (e) => {
     if (!data.rows.length) log("no player nations found in this save");
 
     const fs = await resolveGame(game);
+    attachAdvanceGains(data.rows, (fs && (await loadStartingAdvances(fs))) || STARTING_ADVANCES);
     if (game && !fs) log("the linked folder doesn't look like an EU5 install - skipping flags and map");
     if (opts.flags && fs) {
       stage("Drawing coats of arms…");

@@ -121,6 +121,7 @@ td.l{text-align:left}
   margin-top:4px; margin-left:auto}
 .spark{display:block; margin-left:auto}
 .warnv{color:var(--alarm)}
+.delta{color:var(--verd); font-size:11.5px; margin-left:2px}
 .zero{color:var(--ink-3)}
 tr.detail{display:none}
 tr.detail.open{display:table-row}
@@ -299,6 +300,7 @@ const worldArmy=R.reduce((a,r)=>a+N(r.army),0);
 
 const FIELDS=D.fields||{}, CFG=D.config||{};
 const pct=v=>(N(v)*100).toFixed(0)+"%";
+const plus=v=>(N(v)>=0?"+":"")+int(v);
 const dash='<span class="zero">&mdash;</span>';
 /* Per-field rendering. Anything not listed falls back to a plain number. */
 const SPEC={
@@ -320,7 +322,8 @@ const SPEC={
   war_attrition:{fmt:r=>r.war_attrition?int(r.war_attrition):dash},
   gold:{fmt:r=>int(r.gold)}, dev:{fmt:r=>int(r.dev)},
   locations:{fmt:r=>r.locations}, provinces:{bar:false,fmt:r=>r.provinces},
-  subunits:{bar:false,fmt:r=>r.subunits}, advances:{bar:false,fmt:r=>r.advances},
+  subunits:{bar:false,fmt:r=>r.subunits}, advances:{bar:false,fmt:r=>r.advances+(r.advances_gained==null?"":' <span class="delta" title="since the game started">'+plus(r.advances_gained)+'</span>')},
+  advances_gained:{bar:false,fmt:r=>r.advances_gained==null?dash:plus(r.advances_gained)},
   wars:{bar:false,fmt:r=>r.wars}, rebels:{bar:false,fmt:r=>r.rebels},
   score_place:{bar:false,asc:true,fmt:r=>"#"+int(r.score_place)}
 };
@@ -408,7 +411,7 @@ function detailPanel(r){
       +kv("Great power points",f1(r.gp_points))+kv("World score place",'#'+int(r.score_place))
       +kv("ADM / DIP / MIL",f1(r.score.ADM)+" / "+f1(r.score.DIP)+" / "+f1(r.score.MIL))
       +kv("Prestige",f1(r.prestige))+kv("Stability",f1(r.stability))
-      +kv("Government power",f1(r.govpower))+kv("Advances",r.advances))
+      +kv("Government power",f1(r.govpower))+kv("Advances",r.advances+(r.advances_gained==null?"":" ("+plus(r.advances_gained)+" since start)")))
   + '<div class="grp"><h4>Population, last '+r.pop_hist.length+' months</h4>'
       + '<div style="padding-top:4px">'+sparkline(r.pop_hist,150,40)+'</div>'
       + '<div class="kv"><span>'+pop(r.pop_hist[0])+'</span><b>&rarr;</b><span>'+pop(r.pop_hist[r.pop_hist.length-1])+'</span></div></div>'
