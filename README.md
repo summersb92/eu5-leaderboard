@@ -11,12 +11,15 @@ are never uploaded and the site needs no server.
 1. Make a readable save: add `-debug_mode` to the game's Steam launch
    options, load your save and save again.
 2. Open the page and drop the `.eu5` file on it.
-3. *(Optional)* Drag your `Europa Universalis V` install folder from File
-   Explorer onto step 2. Coats of arms and the map are drawn from the game's
-   own files, which are read locally and never redistributed. Chrome won't
-   let pages *pick* folders under `Program Files` (the Steam default), so
-   dragging is the main route; the page also shows a no-copy junction
-   command as a fallback, and Firefox has no such restriction.
+3. *(Optional)* Link your `Europa Universalis V` install so the report gets
+   coats of arms and the map; the game's files are read locally and never
+   redistributed. **Choose game folder** uses Chrome/Edge's folder picker,
+   and the folder is remembered for later visits. That picker refuses
+   anything under `Program Files` (the Steam default), so either drag the
+   folder onto the page (works, but only for that visit) or give it a
+   junction outside `Program Files` once (the page shows the command) and
+   pick that. Firefox and Safari use a plain folder input with no such
+   restriction and no memory.
 4. **Download report** saves a self-contained HTML file to share.
    **Download data** saves the numbers as JSON; drop that back on the page to
    rebuild the report without the save.

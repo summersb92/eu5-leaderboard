@@ -127,24 +127,52 @@ function sanitizeData(d) {
 // ==========================================================================
 // Game folder linking
 // ==========================================================================
-// Chrome refuses to let a page pick folders under Program Files, where
-// Steam installs by default, so the game folder can also be dragged in
-// (or reached through a junction, see the page). Either way only the few
-// files we need are read, locally, when a report is built.
+// Pages never learn real file paths, so what can be remembered is a folder
+// *handle* from Chrome/Edge's directory picker, kept in IndexedDB. That
+// picker refuses anything under Program Files (Steam's default), so the
+// folder can also be dragged in - which works there but can't be
+// remembered - or reached through a junction outside Program Files, which
+// can. Either way only the few files we need are read, locally.
 const NEEDED = ["main_menu/common/named_colors/", "main_menu/common/coat_of_arms/coat_of_arms/",
   "main_menu/gfx/coat_of_arms/", "in_game/map_data/", "in_game/setup/countries/"];
+const canPickDir = typeof window.showDirectoryPicker === "function";
 let game = null; // {files: Map(relative path -> File), label}
+let savedHandle = null; // remembered folder still waiting for permission
 
-function setGameStatus(text, ok) {
+const idb = {
+  open() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open("eu5-leaderboard", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("kv");
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  },
+  async run(mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction("kv", mode);
+      const req = fn(tx.objectStore("kv"));
+      tx.oncomplete = () => res(req.result);
+      tx.onerror = () => rej(tx.error);
+    });
+  },
+  get(k) { return this.run("readonly", (s) => s.get(k)).catch(() => undefined); },
+  set(k, v) { return this.run("readwrite", (s) => s.put(v, k)).catch(() => {}); },
+  del(k) { return this.run("readwrite", (s) => s.delete(k)).catch(() => {}); },
+};
+
+function setGameStatus(text, ok, button) {
   const s = $("gamestatus");
   s.textContent = text;
   s.classList.toggle("ok", !!ok);
-  $("gameforget").hidden = !ok;
-  $("gamebtn").textContent = ok ? "Change folder" : "Choose game folder";
+  $("gameforget").hidden = !(ok || savedHandle);
+  $("gamebtn").textContent = button || (ok ? "Change folder" : "Choose game folder");
 }
 
-/* Accepts the install folder, its `game` folder, or anything in between -
-   paths are anchored on the main_menu/in_game layout. */
+/* Folder <input> fallback (browsers without the directory picker). Accepts
+   the install folder or its `game` folder - paths are anchored on the
+   main_menu/in_game layout. */
 function linkFileList(list) {
   let prefix = null;
   for (const f of list) {
@@ -169,59 +197,138 @@ function linkFileList(list) {
   maybeRebuild();
 }
 
-/* A folder dragged in from Explorer. The drop hands over a lazy directory
-   entry, so only the handful of subfolders we need are ever opened. */
+/* One shape over the two folder APIs: a dropped FileSystemDirectoryEntry,
+   or a FileSystemDirectoryHandle from the picker / IndexedDB. */
 const entryCall = (fn) => new Promise((res, rej) => fn(res, rej));
-const subdir = (dir, path) => entryCall((ok, no) => dir.getDirectory(path, {}, ok, no)).catch(() => null);
+const folderApi = {
+  entry: {
+    async sub(dir, path) {
+      return entryCall((ok, no) => dir.getDirectory(path, {}, ok, no)).catch(() => null);
+    },
+    async list(dir) {
+      const reader = dir.createReader(), out = [];
+      for (;;) {
+        const batch = await entryCall((ok, no) => reader.readEntries(ok, no));
+        if (!batch.length) return out;
+        for (const e of batch) out.push({ name: e.name, dir: e.isDirectory, obj: e });
+      }
+    },
+    file: (e) => entryCall((ok, no) => e.file(ok, no)),
+  },
+  handle: {
+    async sub(dir, path) {
+      try {
+        for (const part of path.split("/")) dir = await dir.getDirectoryHandle(part);
+        return dir;
+      } catch (e) {
+        return null;
+      }
+    },
+    async list(dir) {
+      const out = [];
+      for await (const [name, h] of dir.entries()) out.push({ name, dir: h.kind === "directory", obj: h });
+      return out;
+    },
+    file: (h) => h.getFile(),
+  },
+};
 
-async function listTree(dir, rel, out, onCount) {
-  const reader = dir.createReader();
-  for (;;) {
-    const batch = await entryCall((ok, no) => reader.readEntries(ok, no));
-    if (!batch.length) break;
-    for (const e of batch) {
-      if (e.isDirectory) await listTree(e, rel + e.name + "/", out, onCount);
-      else out.push([rel + e.name, e]);
-    }
-    onCount(out.length);
+async function listTree(api, dir, rel, out, onCount) {
+  for (const e of await api.list(dir)) {
+    if (e.dir) await listTree(api, e.obj, rel + e.name + "/", out, onCount);
+    else out.push([rel + e.name, e.obj]);
   }
+  onCount(out.length);
 }
 
-async function linkDroppedFolder(entry) {
-  setGameStatus(`Reading ${entry.name}…`);
+/* Returns true when linked. */
+async function linkFolder(api, top, name) {
+  setGameStatus(`Reading ${name}…`);
+  const bar = $("gamebar");
   try {
-    let root = entry;
-    if (!(await subdir(root, "main_menu"))) root = await subdir(entry, "game");
-    if (!root || !(await subdir(root, "main_menu/common/coat_of_arms"))) {
-      setGameStatus(`“${entry.name}” doesn't contain the game's files — drop Europa Universalis V, or the game folder inside it.`);
-      return;
+    let root = top;
+    if (!(await api.sub(root, "main_menu"))) root = await api.sub(top, "game");
+    if (!root || !(await api.sub(root, "main_menu/common/coat_of_arms"))) {
+      setGameStatus(`“${name}” doesn't contain the game's files — use Europa Universalis V, or the game folder inside it.`);
+      return false;
     }
     // List first (count unknown, so the bar is indeterminate), then open
-    // each file entry with a real count to show against.
-    const bar = $("gamebar");
+    // each file with a real count to show against.
     setBar(bar, null);
     const entries = [];
     for (const n of NEEDED) {
-      const d = await subdir(root, n.replace(/\/$/, ""));
-      if (d) await listTree(d, n, entries, (k) => setGameStatus(`Finding game files… ${k.toLocaleString()}`));
+      const d = await api.sub(root, n.replace(/\/$/, ""));
+      if (d) await listTree(api, d, n, entries, (k) => setGameStatus(`Finding game files… ${k.toLocaleString()}`));
     }
     const files = new Map();
     let i = 0;
-    for (const [rel, e] of entries) {
-      files.set(rel, await entryCall((ok, no) => e.file(ok, no)));
+    for (const [rel, obj] of entries) {
+      files.set(rel, await api.file(obj));
       if (++i % 50 === 0 || i === entries.length) {
         setBar(bar, i / entries.length);
         setGameStatus(`Reading game files… ${i.toLocaleString()} of ${entries.length.toLocaleString()}`);
       }
     }
     bar.hidden = true;
-    game = { files, label: entry.name };
-    setGameStatus(`Linked: ${entry.name}`, true);
-    maybeRebuild();
+    game = { files, label: name };
+    return true;
   } catch (err) {
-    $("gamebar").hidden = true;
-    setGameStatus(`Couldn't read “${entry.name}”: ${err.message || err.name}. Try the folder link below.`);
+    bar.hidden = true;
+    setGameStatus(`Couldn't read “${name}”: ${err.message || err.name}. Try the folder link below.`);
+    return false;
   }
+}
+
+async function linkDroppedFolder(entry) {
+  if (await linkFolder(folderApi.entry, entry, entry.name)) {
+    setGameStatus(`Linked: ${entry.name} (for this visit — dragged folders can't be remembered)`, true);
+    maybeRebuild();
+  }
+}
+
+async function linkHandle(h) {
+  if (await linkFolder(folderApi.handle, h, h.name)) {
+    await idb.set("gameDir", h);
+    savedHandle = null;
+    setGameStatus(`Linked: ${h.name} (remembered)`, true);
+    maybeRebuild();
+  }
+}
+
+async function pickGame() {
+  if (savedHandle) {
+    const h = savedHandle;
+    const perm = await h.requestPermission({ mode: "read" }).catch(() => "denied");
+    if (perm === "granted") return linkHandle(h);
+    setGameStatus(`Chrome didn't allow access to ${h.name} — choose the folder again.`, false);
+    savedHandle = null;
+    return;
+  }
+  if (!canPickDir) {
+    $("gameinput").click();
+    return;
+  }
+  let h;
+  try {
+    h = await window.showDirectoryPicker({ id: "eu5-install", mode: "read" });
+  } catch (e) {
+    // A folder Chrome blocks (Program Files) comes back as a plain cancel.
+    if (!game) setGameStatus("Nothing linked. If Chrome said the folder contains system files, drag it onto this box instead.");
+    return;
+  }
+  await linkHandle(h);
+}
+
+/* A folder remembered from an earlier visit: link it straight away if
+   Chrome still grants access, otherwise wait for a click to ask again. */
+async function restoreGame() {
+  if (!canPickDir) return;
+  const h = await idb.get("gameDir");
+  if (!h || typeof h.queryPermission !== "function") return;
+  const perm = await h.queryPermission({ mode: "read" }).catch(() => "denied");
+  if (perm === "granted") return linkHandle(h);
+  savedHandle = h;
+  setGameStatus(`Remembered: ${h.name}`, false, "Reconnect");
 }
 
 function onDrop(e) {
@@ -235,10 +342,13 @@ function onDrop(e) {
   else if (dt.files.length) handleFile(dt.files[0]);
 }
 
-function forgetGame() {
+async function forgetGame() {
   game = null;
+  savedHandle = null;
+  await idb.del("gameDir");
   setGameStatus("Not linked");
 }
+
 // ==========================================================================
 // Running a build
 // ==========================================================================
@@ -430,7 +540,7 @@ function init() {
       () => { btn.textContent = "Select and copy it"; });
   });
 
-  $("gamebtn").addEventListener("click", () => $("gameinput").click());
+  $("gamebtn").addEventListener("click", pickGame);
   $("gameforget").addEventListener("click", forgetGame);
   $("gameinput").addEventListener("change", (e) => {
     if (e.target.files.length) linkFileList(e.target.files);
@@ -449,6 +559,7 @@ function init() {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   });
 
+  restoreGame();
   loadTemplate().catch(() => {});
 }
 

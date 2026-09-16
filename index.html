@@ -47,16 +47,17 @@
         <input type="file" id="gameinput" webkitdirectory directory multiple hidden>
         <p class="hint">Steam's default is <code class="path">C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis V</code>
           &mdash; in Steam, right-click the game &rarr; <em>Manage</em> &rarr; <em>Browse local files</em> to open it.
-          Installed somewhere other than <code>Program Files</code>? The button works too.</p>
+          The button works for folders outside <code>Program Files</code>, and Chrome and Edge then remember
+          the folder so later visits only need your save.</p>
         <details class="fallback">
-          <summary>Chrome says the folder &ldquo;contains system files&rdquo;?</summary>
+          <summary>Chrome says the folder &ldquo;contains system files&rdquo;, or you want it remembered?</summary>
           <p>Chrome won't let pages open folders inside <code>Program Files</code>. If dragging doesn't work
             either, give the game folder a second address outside it. Paste this into a Command Prompt or
             PowerShell window and press Enter &mdash; it creates a link, not a copy, and needs no admin rights:</p>
           <div class="cmdrow"><code id="junccmd">cmd /c mklink /J "%USERPROFILE%\EU5 game" "C:\Program Files (x86)\Steam\steamapps\common\Europa Universalis V\game"</code>
             <button class="btn" id="junccopy" type="button">Copy</button></div>
-          <p>Then choose or drag the new <code>EU5 game</code> folder from your user folder
-            (<code>C:\Users\<em>your name</em></code>). Change the second path if the game is installed
+          <p>Then click <em>Choose game folder</em> and pick the new <code>EU5 game</code> folder in your user
+            folder (<code>C:\Users\<em>your name</em></code>) &mdash; that one can be remembered. Change the second path if the game is installed
             elsewhere. Firefox doesn't have this restriction at all.</p>
         </details>
         <div class="opts">
@@ -112,8 +113,13 @@
           the report is built on your machine. Close the tab and it's gone. The only network requests are
           for this page itself and its fonts.</p></details>
       <details><summary>Which browsers work?</summary>
-        <p>Any current Chrome, Edge, Firefox or Safari. The game folder is linked for the current visit
-          only, so you'll add it again next time.</p></details>
+        <p>Any current Chrome, Edge, Firefox or Safari. Chrome and Edge remember a game folder chosen with
+          the button (next visit it links itself, or needs one &ldquo;Reconnect&rdquo; click). A dragged folder,
+          and any folder in Firefox or Safari, is linked for the current visit only.</p></details>
+      <details><summary>Can the page just remember where my game is?</summary>
+        <p>Web pages are never told real file paths, so there's no path to save. What Chrome and Edge can keep
+          is permission to a folder picked with the button &mdash; which is why the folder-link trick above is
+          worth doing once if your game is under <code>Program Files</code>.</p></details>
       <details><summary>Why does Chrome say it will upload files?</summary>
         <p>Choosing a folder with the button always shows that prompt in Chrome, even when, as here, the page
           only reads a few files locally. Dragging the folder in skips it. You can check: this page makes no network requests while building
