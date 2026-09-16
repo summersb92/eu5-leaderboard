@@ -333,8 +333,15 @@ function onDrop(e) {
   if (!dt) return;
   const item = dt.items && dt.items[0];
   const entry = item && item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-  if (entry && entry.isDirectory) linkDroppedFolder(entry);
-  else if (dt.files.length) handleFile(dt.files[0]);
+  if (entry && entry.isDirectory) return linkDroppedFolder(entry);
+  const file = dt.files[0];
+  if (!file) return;
+  // Must be requested during the drop event itself; lets the save be
+  // remembered in the recent list (Chrome/Edge).
+  const pending = canPickFile && item && item.getAsFileSystemHandle ? item.getAsFileSystemHandle() : null;
+  Promise.resolve(pending).catch(() => null)
+    .then((h) => (h ? rememberSave(h, file) : null)).catch(() => null)
+    .then((rec) => handleFile(file, rec));
 }
 
 async function forgetGame() {
@@ -342,6 +349,134 @@ async function forgetGame() {
   savedHandle = null;
   await idb.del("gameDir");
   setGameStatus("Not linked");
+}
+
+// ==========================================================================
+// Recent saves
+// ==========================================================================
+// Pages can't keep file paths, but Chrome/Edge can keep file handles in
+// IndexedDB and reopen the same file on a later visit after a permission
+// prompt. Other browsers simply don't show the list.
+const canPickFile = typeof window.showOpenFilePicker === "function";
+const RECENT_MAX = 8;
+let recent = []; // [{handle, name, size, modified, used, date}]
+
+const fmtSize = (b) => (b >= 1e6 ? Math.round(b / 1e6) + " MB" : Math.max(1, Math.round(b / 1e3)) + " KB");
+const fmtWhen = (t) => new Date(t).toLocaleString(undefined,
+  { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+async function loadRecent() {
+  if (!canPickFile) return;
+  const saved = await idb.get("recentSaves");
+  recent = Array.isArray(saved) ? saved.filter((r) => r && r.handle) : [];
+  renderRecent();
+}
+
+const storeRecent = () => idb.set("recentSaves", recent);
+
+/* Put a just-opened file at the top of the list; returns its entry. */
+async function rememberSave(handle, file) {
+  if (!canPickFile || !handle || handle.kind !== "file") return null;
+  let entry = null;
+  for (const r of recent) {
+    if (await r.handle.isSameEntry(handle).catch(() => false)) entry = r;
+  }
+  if (entry) {
+    // same file again: keep its in-game date unless it has been re-saved
+    if (entry.modified !== file.lastModified) entry.date = null;
+    Object.assign(entry, { handle, name: file.name, size: file.size, modified: file.lastModified, used: Date.now(), missing: false });
+  } else {
+    entry = { handle, name: file.name, size: file.size, modified: file.lastModified, used: Date.now(), date: null };
+  }
+  recent = [entry, ...recent.filter((r) => r !== entry)].slice(0, RECENT_MAX);
+  await storeRecent();
+  renderRecent();
+  return entry;
+}
+
+/* After a successful build: note the in-game date shown in the list. */
+function noteRecent(entry, world) {
+  if (!entry || !recent.includes(entry)) return;
+  entry.date = world && world.date ? String(world.date) : null;
+  storeRecent();
+  renderRecent();
+}
+
+async function openRecent(entry) {
+  const h = entry.handle;
+  let perm = await h.queryPermission({ mode: "read" }).catch(() => "denied");
+  if (perm !== "granted") perm = await h.requestPermission({ mode: "read" }).catch(() => "denied");
+  if (perm !== "granted") {
+    fail(`The browser didn't allow access to ${entry.name}.`);
+    return;
+  }
+  let file;
+  try {
+    file = await h.getFile();
+  } catch (e) {
+    fail(`${entry.name} isn't there any more — it may have been moved, renamed or deleted.`);
+    entry.missing = true;
+    renderRecent();
+    return;
+  }
+  handleFile(file, await rememberSave(h, file));
+}
+
+async function forgetRecent(entry) {
+  recent = entry ? recent.filter((r) => r !== entry) : [];
+  await storeRecent();
+  renderRecent();
+}
+
+function renderRecent() {
+  const box = $("recent"), list = $("recentlist");
+  box.hidden = !recent.length;
+  list.textContent = "";
+  for (const r of recent) {
+    const li = document.createElement("li");
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "recentopen" + (r.missing ? " missing" : "");
+    const name = document.createElement("span");
+    name.className = "recentname";
+    name.textContent = r.name;
+    const meta = document.createElement("span");
+    meta.className = "recentmeta";
+    meta.textContent = [r.missing ? "not found" : null, r.date, fmtSize(r.size), "saved " + fmtWhen(r.modified)]
+      .filter(Boolean).join(" · ");
+    open.append(name, meta);
+    open.title = "Build the report from " + r.name;
+    open.addEventListener("click", () => openRecent(r));
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "recentdel";
+    del.textContent = "×";
+    del.setAttribute("aria-label", "Remove " + r.name + " from recent saves");
+    del.addEventListener("click", () => forgetRecent(r));
+    li.append(open, del);
+    list.appendChild(li);
+  }
+}
+
+async function pickSave() {
+  if (!canPickFile) {
+    $("saveinput").click();
+    return;
+  }
+  let handle;
+  try {
+    [handle] = await window.showOpenFilePicker({
+      id: "eu5-saves",
+      types: [{
+        description: "EU5 saves or leaderboard data",
+        accept: { "application/octet-stream": [".eu5"], "application/json": [".json"] },
+      }],
+    });
+  } catch (e) {
+    return; // cancelled
+  }
+  const file = await handle.getFile();
+  handleFile(file, await rememberSave(handle, file));
 }
 
 // ==========================================================================
@@ -384,7 +519,7 @@ function options() {
   };
 }
 
-function build(save) {
+function build(save, entry) {
   lastSave = save;
   if (worker) worker.terminate();
   $("log").textContent = "";
@@ -411,6 +546,7 @@ function build(save) {
       try {
         await showReport(m.data, save.name, notes);
         showStatus(`Built from ${save.name}`, "done");
+        noteRecent(entry, m.data.world);
       } catch (err) {
         fail(err.message);
       }
@@ -446,7 +582,7 @@ function maybeRebuild() {
   $("rebuild").hidden = !(lastSave && current);
 }
 
-async function loadJson(file) {
+async function loadJson(file, entry) {
   lastSave = null;
   $("log").textContent = "";
   $("errorbox").hidden = true;
@@ -457,15 +593,16 @@ async function loadJson(file) {
     const data = JSON.parse(await file.text());
     await showReport(data, file.name, []);
     showStatus(`Built from ${file.name}`, "done");
+    noteRecent(entry, data.world);
   } catch (err) {
     fail(err instanceof SyntaxError ? "That file isn't valid JSON." : err.message);
   }
 }
 
-function handleFile(file) {
+function handleFile(file, entry) {
   if (!file) return;
-  if (/\.json$/i.test(file.name)) loadJson(file);
-  else build(file);
+  if (/\.json$/i.test(file.name)) loadJson(file, entry);
+  else build(file, entry);
 }
 
 // ==========================================================================
@@ -516,8 +653,15 @@ function download(name, type, content) {
 function init() {
   const drop = $("drop"), input = $("saveinput");
   drop.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); }
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickSave(); }
   });
+  drop.addEventListener("click", (e) => {
+    if (e.target.closest("a")) return;
+    e.preventDefault();
+    pickSave();
+  });
+  $("recentclear").addEventListener("click", () => forgetRecent(null));
+  loadRecent();
   input.addEventListener("change", () => { handleFile(input.files[0]); input.value = ""; });
   for (const zone of [drop, $("step-game")]) {
     ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, () => zone.classList.add("over")));

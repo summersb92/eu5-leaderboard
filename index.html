@@ -31,6 +31,10 @@
           <span class="dropsub">It has to be written in debug mode &mdash; <a href="#readable">how</a>.
             Usually in <code class="path">Documents\Paradox Interactive\Europa Universalis V\save games</code></span>
         </label>
+        <div class="recent" id="recent" hidden>
+          <div class="recenthead"><span>Recent saves</span><button class="linkbtn" id="recentclear" type="button">Clear</button></div>
+          <ul class="recentlist" id="recentlist"></ul>
+        </div>
       </div>
 
       <div class="step" id="step-game">
@@ -124,6 +128,11 @@
         <p>Choosing a folder with the button always shows that prompt in Chrome, even when, as here, the page
           only reads a few files locally. Dragging the folder in skips it. You can check: this page makes no network requests while building
           a report (open your browser's developer tools &rarr; Network).</p></details>
+      <details><summary>What does &ldquo;Recent saves&rdquo; remember?</summary>
+        <p>In Chrome and Edge, saves you choose or drop are listed so you can rebuild with one click. The browser
+          keeps a private reference to each file, in this browser only &mdash; never the file itself or its
+          contents, and never on a server. It will ask permission again on a new visit, and a save that has been
+          overwritten (an autosave, say) opens in its latest state. Use &times; or <em>Clear</em> to forget them.</p></details>
       <details><summary>What can I do with the report?</summary>
         <p><em>Download report</em> saves one self-contained HTML file you can send to anyone &mdash; it opens
           in any browser with nothing to install. <em>Download data</em> saves the extracted numbers as JSON;

@@ -10,7 +10,9 @@ are never uploaded and the site needs no server.
 
 1. Make a readable save: add `-debug_mode` to the game's Steam launch
    options, load your save and save again.
-2. Open the page and drop the `.eu5` file on it.
+2. Open the page and drop the `.eu5` file on it. In Chrome and Edge, saves
+   you pick or drop appear under **Recent saves** for one-click rebuilds on
+   later visits (the browser keeps a file handle, not the file or a path).
 3. *(Optional)* Link your `Europa Universalis V` install so the report gets
    coats of arms and the map; the game's files are read locally and never
    redistributed. **Choose game folder** uses Chrome/Edge's folder picker,

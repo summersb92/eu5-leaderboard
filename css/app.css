@@ -70,6 +70,22 @@ h2{font-family:Fraunces,Georgia,serif; font-weight:600; font-size:23px; letter-s
 .dropmain u{color:var(--accent); text-underline-offset:3px}
 .dropsub{font-size:13px; color:var(--ink-3)}
 
+.recent{margin-top:14px}
+.recenthead{display:flex; justify-content:space-between; align-items:baseline; font-size:10.5px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:700; padding-bottom:6px; border-bottom:1px solid var(--line-soft)}
+.linkbtn{font:inherit; letter-spacing:.08em; background:none; border:0; color:var(--ink-3); cursor:pointer; padding:2px 0}
+.linkbtn:hover{color:var(--accent)}
+.recentlist{list-style:none; margin:0; padding:0}
+.recentlist li{display:flex; align-items:stretch; border-bottom:1px solid var(--line-soft)}
+.recentopen{flex:1; min-width:0; text-align:left; background:none; border:0; padding:8px 6px; cursor:pointer;
+  display:flex; flex-direction:column; gap:1px; font:inherit; color:var(--ink); border-radius:4px}
+.recentopen:hover{background:var(--accent-wash)}
+.recentopen:hover .recentname{color:var(--accent)}
+.recentname{font-weight:600; font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.recentmeta{font-size:12px; color:var(--ink-3); font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+.recentopen.missing .recentname{color:var(--ink-3); text-decoration:line-through}
+.recentdel{background:none; border:0; color:var(--ink-3); cursor:pointer; font-size:18px; padding:0 10px; border-radius:4px}
+.recentdel:hover{color:var(--alarm); background:var(--alarm-wash)}
 .btn{font:600 11.5px/1 Archivo,sans-serif; letter-spacing:.1em; text-transform:uppercase;
   color:var(--ink-2); background:var(--surface-2); border:1px solid var(--line);
   border-radius:4px; padding:9px 13px; cursor:pointer; white-space:nowrap}
