@@ -821,8 +821,12 @@ async function buildMapData(data, sections, save, fs) {
   const cidToTag = new Map(rows.map((r) => [r.id, r.tag]));
   const tagRgb = new Map();
   for (const r of rows) {
+    // The game's setup colour, else the colour the save itself records
+    // (covers tags formed or released mid-game).
     const cn = tagToColorname.get(r.tag);
-    tagRgb.set(r.tag, cn ? namedColors.get("map_" + cn) || null : null);
+    let rgb = cn ? namedColors.get("map_" + cn) || null : null;
+    if (!rgb && r.color) rgb = [1, 3, 5].map((i) => parseInt(r.color.slice(i, i + 2), 16));
+    tagRgb.set(r.tag, rgb);
   }
 
   let ltext = await readSpan(save, ...sections.get("locations")[0]);
@@ -1206,6 +1210,10 @@ async function extract(save, sections, topAi = 0) {
     }
     if (!isDict(d)) continue;
     const r = new Map([["id", cid], ["tag", tags.get(cid) || "?"]]);
+    // The country's current map colour, e.g. `color=rgb { 104 107 106 }`.
+    const cm = chunk.match(/\n\tcolor=(rgb|hsv360|hsv)\s*\{([^}]*)\}/);
+    const rgb = cm ? colorFrom(cm[1], cm[2]) : null;
+    if (rgb) r.set("color", hex(rgb));
     for (const k of KEEP) if (d.has(k)) r.set(k, d.get(k));
     for (const k of BLK) if (d.has(k)) r.set(k, d.get(k));
     r.set("n_owned", asList(r.get("owned_locations")).length);
@@ -1408,7 +1416,7 @@ async function extract(save, sections, topAi = 0) {
     const rk = {};
     for (const mname of METRICS) rk[mname] = ranks[mname].has(cid) ? ranks[mname].get(cid) : null;
     rows.push({
-      id: cid, tag, name: NAMES[tag] || tag,
+      id: cid, tag, name: NAMES[tag] || tag, color: get(c, "color") || null,
       player: players.has(cid) ? players.get(cid) : "AI", is_player: players.has(cid),
       pop: metric(cid, "pop"), gold: metric(cid, "gold"),
       taxbase: metric(cid, "taxbase"), dev: metric(cid, "dev"),

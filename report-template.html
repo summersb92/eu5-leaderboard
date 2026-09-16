@@ -33,15 +33,11 @@ body{background:var(--bg); color:var(--ink);
 .wrap{max-width:1120px; margin:0 auto; padding-inline:20px; padding-block:0 72px}
 .mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums}
 .num{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:13.5px}
-.mast{padding-block:56px 34px; border-bottom:1px solid var(--line)}
-.masttop{display:block}
+.mast{padding-block:40px 30px; border-bottom:1px solid var(--line)}
 .eyebrow{font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-3);
   font-weight:600; margin:0 0 18px; display:flex; gap:14px; flex-wrap:wrap; align-items:baseline}
 .eyebrow b{color:var(--accent); font-weight:600}
-h1{font-family:Fraunces,Georgia,serif; font-weight:800; font-size:clamp(40px,7.2vw,68px);
-  line-height:1.02; letter-spacing:-.018em; margin:0; text-wrap:balance}
-h1 em{font-style:normal; color:var(--accent)}
-.facts{display:flex; flex-wrap:wrap; gap:0; margin-top:30px; border-top:1px solid var(--line-soft)}
+.facts{display:flex; flex-wrap:wrap; gap:0; margin-top:0; border-top:1px solid var(--line-soft)}
 .fact{flex:1 1 150px; padding:14px 20px 14px 0; border-right:1px solid var(--line-soft)}
 .fact:last-child{border-right:0}
 .fact dt{font-size:11px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3); font-weight:600}
@@ -63,6 +59,21 @@ h2{font-family:Fraunces,Georgia,serif; font-weight:600; font-size:27px; letter-s
 .colpanel{margin:12px 0 0; padding:14px 16px; border:1px solid var(--line);
   border-radius:6px; background:var(--surface);
   display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:6px 18px}
+.colpanel[hidden]{display:none}
+.colorder{grid-column:1/-1; padding-bottom:12px; margin-bottom:4px; border-bottom:1px solid var(--line-soft)}
+.colhint{font-size:12px; color:var(--ink-3); margin-bottom:8px}
+.colchips{display:flex; flex-wrap:wrap; gap:6px}
+.colchip{display:inline-flex; align-items:center; gap:1px; font-size:12.5px; color:var(--ink);
+  border:1px solid var(--line); border-radius:4px; background:var(--raised); padding:1px 2px; cursor:grab}
+.colchip button{border:0; background:none; color:var(--ink-3); cursor:pointer; font-size:15px;
+  line-height:1; padding:3px 6px; border-radius:3px}
+.colchip button:hover{color:var(--accent); background:var(--accent-wash)}
+.colchip button:disabled{opacity:.25; cursor:default; background:none}
+.dragging{opacity:.4}
+.colchip.dropL{box-shadow:-3px 0 0 var(--accent)}
+.colchip.dropR{box-shadow:3px 0 0 var(--accent)}
+thead th.dropL{box-shadow:inset 3px 0 0 var(--accent)}
+thead th.dropR{box-shadow:inset -3px 0 0 var(--accent)}
 .colpanel label{display:flex; align-items:center; gap:7px; font-size:12.5px;
   color:var(--ink-2); cursor:pointer}
 .colpanel label:hover{color:var(--accent)}
@@ -162,7 +173,7 @@ table.mat tbody tr:hover th.good{color:var(--accent)}
 .mapactions{margin:16px 4px 0; display:flex; gap:10px; flex-wrap:wrap}
 footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3);
   font-size:12.5px; display:flex; gap:18px; flex-wrap:wrap; justify-content:space-between}
-@media (max-width:640px){.mast{padding-block:38px 26px}.panel{padding:18px 14px 22px 18px}
+@media (max-width:640px){.mast{padding-block:28px 22px}.panel{padding:18px 14px 22px 18px}
   .fact{flex-basis:calc(50% - 1px); border-right:0}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
@@ -171,15 +182,12 @@ footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); colo
 <div class="wrap">
 <header class="mast">
   <p class="eyebrow" id="eyebrow"></p>
-  <div class="masttop">
-    <h1 id="h1"></h1>
-  </div>
   <dl class="facts" id="facts"></dl>
 </header>
 
 <section>
   <div class="sechead"><h2>The standings</h2><span class="rule"></span>
-    <span class="eyebrow" style="margin:0">click a column to sort &middot; click a nation to open it</span>
+    <span class="eyebrow" style="margin:0">click a column to sort &middot; drag one to move it &middot; click a nation to open it</span>
     <button class="btn" id="colbtn" type="button">Columns</button>
     <button class="btn" id="copybtn" type="button">Copy for Discord</button></div>
   <div class="colpanel" id="colpanel" hidden></div>
@@ -241,7 +249,6 @@ const pretty=g=>PRETTY[g]||g.replace(/_/g," ");
 const nPlayers=R.filter(r=>r.is_player).length;
 
 $("eyebrow").innerHTML='<span>Europa Universalis V'+(W.multiplayer?" &middot; multiplayer":" &middot; single player")+'</span><span><b>'+esc(W.date)+'</b></span><span>patch '+esc(W.version)+'</span>';
-$("h1").innerHTML=(document.title.split(" of ")[0]||"Standings")+'<br><em>of '+esc((W.date+"").split(".")[0])+'</em>';
 $("src").innerHTML='Read from <span class="mono">'+esc(W.save)+'</span> &middot; debug-mode plaintext save';
 $("stamp").textContent="In-game date "+W.date+" · "+R.length+" nations shown";
 $("goodsnote").textContent="Raw materials by number of locations producing them, counted from every location each nation owns. The shading runs with the count.";
@@ -357,6 +364,7 @@ function head(){
     th.tabIndex=0;
     const go=()=>{ if(sortKey===c.k) sortAsc=!sortAsc; else {sortKey=c.k; sortAsc=!!c.asc;} render(); };
     th.onclick=go; th.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
+    dragCol(th,c.k);
     tr.appendChild(th);
   });
 }
@@ -428,7 +436,7 @@ function render(){
         td.className="l";
         const who=r.is_player?esc(r.player):'<span class="ai">AI</span>';
         const fl=r.flag?'<img class="flag" src="'+esc(r.flag)+'" alt="'+esc(r.tag)+' coat of arms">'
-                       :'<span class="flag ph"></span>';
+                       :'<span class="flag ph"'+(r.color?' style="background:'+esc(r.color)+'"':'')+'></span>';
         td.innerHTML='<div class="nat">'+fl+'<span class="tag">'+esc(r.tag)+'</span>'
           +'<span><span class="natname">'+esc(r.name)+'</span><br><span class="player">'+who+'</span></span></div>';
       } else if(c.spark){ td.innerHTML=sparkline(r.pop_hist);
@@ -488,43 +496,101 @@ render();
   s.innerHTML=g;
 })();
 
-/* ---- column picker: tweak without re-running the script ---- */
+/* ---- column picker: show, hide and reorder; saved in this browser ---- */
+function setChosen(next){
+  chosen=next.filter((k,i)=>(k in FIELDS)&&next.indexOf(k)===i);
+  if(!chosen.includes("tag")) chosen.unshift("tag");
+  COLS=chosen.map(colSpec);
+  if(!chosen.includes(sortKey)){ sortKey=chosen.includes("gp_rank")?"gp_rank":"tag"; sortAsc=true; }
+  try{ localStorage.setItem(STORE, JSON.stringify(chosen)); }catch(e){}
+  buildPicker();
+  render();
+}
+/* move column `from` to just before (or after) column `target` */
+function dropCol(from,target,after){
+  if(from===target||!chosen.includes(from)) return;
+  const next=chosen.filter(x=>x!==from);
+  next.splice(next.indexOf(target)+(after?1:0),0,from);
+  setChosen(next);
+}
+/* Shared drag-to-reorder wiring for header cells and picker chips. */
+const COLDRAG="text/x-eu5-col";
+function dragCol(node,k){
+  node.draggable=true;
+  node.addEventListener("dragstart",e=>{
+    e.dataTransfer.setData(COLDRAG,k); e.dataTransfer.effectAllowed="move";
+    node.classList.add("dragging");
+  });
+  node.addEventListener("dragend",()=>node.classList.remove("dragging"));
+  const side=e=>{const b=node.getBoundingClientRect(); return e.clientX>b.left+b.width/2;};
+  const clear=()=>node.classList.remove("dropL","dropR");
+  node.addEventListener("dragover",e=>{
+    if(!e.dataTransfer.types.includes(COLDRAG)) return;
+    e.preventDefault(); e.dataTransfer.dropEffect="move";
+    const after=side(e); node.classList.toggle("dropR",after); node.classList.toggle("dropL",!after);
+  });
+  node.addEventListener("dragleave",clear);
+  node.addEventListener("drop",e=>{
+    if(!e.dataTransfer.types.includes(COLDRAG)) return;
+    e.preventDefault(); e.stopPropagation(); clear();
+    dropCol(e.dataTransfer.getData(COLDRAG),k,side(e));
+  });
+}
+function buildPicker(){
+  const panel=$("colpanel");
+  panel.innerHTML="";
+  const ord=el("div","colorder");
+  ord.appendChild(el("div","colhint","Order &mdash; drag to rearrange (or drag the table headers), or use the arrows"));
+  const chips=el("div","colchips");
+  chosen.forEach((k,i)=>{
+    const chip=el("span","colchip");
+    const mv=(label,dir,dis)=>{
+      const b=el("button",null,dir<0?"&#8249;":"&#8250;"); b.type="button";
+      b.setAttribute("aria-label","Move "+FIELDS[k]+" "+label); b.disabled=dis;
+      b.onclick=()=>{ const next=[...chosen]; next.splice(i,1); next.splice(i+dir,0,k); setChosen(next);
+        const again=$("colpanel").querySelectorAll(".colchip")[i+dir];
+        if(again) (again.querySelectorAll("button")[dir<0?0:1]||again).focus(); };
+      return b;
+    };
+    chip.appendChild(mv("left",-1,i===0));
+    chip.appendChild(el("span",null,esc(FIELDS[k])));
+    chip.appendChild(mv("right",1,i===chosen.length-1));
+    dragCol(chip,k);
+    chips.appendChild(chip);
+  });
+  ord.appendChild(chips);
+  panel.appendChild(ord);
+  Object.keys(FIELDS).forEach(k=>{
+    const id="col_"+k;
+    const lab=el("label"); lab.htmlFor=id;
+    const cb=el("input"); cb.type="checkbox"; cb.id=id; cb.checked=chosen.includes(k);
+    cb.disabled=(k==="tag");
+    cb.onchange=()=>{
+      setChosen(cb.checked?[...chosen,k]:chosen.filter(x=>x!==k));
+      const again=$(id); if(again) again.focus();
+    };
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(FIELDS[k]));
+    panel.appendChild(lab);
+  });
+  const foot=el("div","colfoot");
+  const reset=el("button","btn","Reset to defaults"); reset.type="button";
+  reset.onclick=()=>{
+    try{ localStorage.removeItem(STORE); }catch(e){}
+    sortKey="gp_rank"; sortAsc=true;
+    setChosen((CFG.standings||[]).filter(k=>k in FIELDS));
+    try{ localStorage.removeItem(STORE); }catch(e){}
+  };
+  foot.appendChild(reset);
+  foot.appendChild(el("span",null,"Saved in this browser."));
+  panel.appendChild(foot);
+}
 (function(){
   const panel=$("colpanel"), btn=$("colbtn");
-  const order=Object.keys(FIELDS);
-  function build(){
-    panel.innerHTML="";
-    order.forEach(k=>{
-      const id="col_"+k;
-      const lab=el("label"); lab.htmlFor=id;
-      const cb=el("input"); cb.type="checkbox"; cb.id=id; cb.checked=chosen.includes(k);
-      cb.disabled=(k==="tag");
-      cb.onchange=()=>{
-        chosen = order.filter(x => x===k ? cb.checked : chosen.includes(x));
-        if(!chosen.includes("tag")) chosen.unshift("tag");
-        COLS=chosen.map(colSpec);
-        if(!chosen.includes(sortKey)) { sortKey=chosen.includes("gp_rank")?"gp_rank":"tag"; sortAsc=true; }
-        try{ localStorage.setItem(STORE, JSON.stringify(chosen)); }catch(e){}
-        render();
-      };
-      lab.appendChild(cb); lab.appendChild(document.createTextNode(FIELDS[k]));
-      panel.appendChild(lab);
-    });
-    const foot=el("div","colfoot");
-    const reset=el("button","btn","Reset to defaults"); reset.type="button";
-    reset.onclick=()=>{
-      try{ localStorage.removeItem(STORE); }catch(e){}
-      chosen=(CFG.standings||[]).filter(k=>k in FIELDS);
-      if(!chosen.includes("tag")) chosen.unshift("tag");
-      COLS=chosen.map(colSpec); sortKey=chosen.includes("gp_rank")?"gp_rank":"tag"; sortAsc=true;
-      build(); render();
-    };
-    foot.appendChild(reset);
-    foot.appendChild(el("span",null,"Saved in this browser."));
-    panel.appendChild(foot);
-  }
-  build();
-  btn.onclick=()=>{ panel.hidden=!panel.hidden; btn.classList.toggle("ok",!panel.hidden); };
+  buildPicker();
+  panel.hidden=true;
+  btn.setAttribute("aria-expanded","false");
+  btn.onclick=()=>{ panel.hidden=!panel.hidden; btn.classList.toggle("ok",!panel.hidden);
+    btn.setAttribute("aria-expanded",String(!panel.hidden)); };
 })();
 
 /* ---- Discord summary: fixed-width, follows the current sort AND whichever
@@ -711,7 +777,7 @@ if(D.map){
     });
     h+='</tr></thead><tbody>';
     rows.forEach(r=>{
-      const fl=r.flag?'<img class="flag" src="'+esc(r.flag)+'" alt="">':'<span class="flag ph"></span>';
+      const fl=r.flag?'<img class="flag" src="'+esc(r.flag)+'" alt="">':'<span class="flag ph"'+(r.color?' style="background:'+esc(r.color)+'"':'')+'></span>';
       h+='<tr class="row" style="cursor:default"><td class="l"><div class="nat">'+fl
        +'<span class="tag">'+esc(r.tag)+'</span><span class="natname">'+esc(r.name)+'</span></div></td>';
       C.slice(1).forEach(c=>h+='<td class="num">'+c.f(r)+'</td>');

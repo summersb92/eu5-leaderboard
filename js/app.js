@@ -32,12 +32,6 @@ const DEFAULT_CONFIG = {
   ledger: ["tag", "kills", "war_battle", "war_attrition", "wars", "rebels",
     "army_tradition"],
 };
-const NUMWORD = {
-  1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six",
-  7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten", 11: "Eleven",
-  12: "Twelve", 13: "Thirteen", 14: "Fourteen", 15: "Fifteen", 16: "Sixteen",
-};
-
 // U+2028/U+2029 are valid in JSON but end a line inside a <script>.
 const LINE_SEPS = new RegExp("[" + String.fromCharCode(0x2028, 0x2029) + "]", "g");
 
@@ -49,8 +43,7 @@ const loadTemplate = () => (templatePromise ||= fetch("report-template.html").th
 
 function buildHtml(tpl, data) {
   const year = String(data.world.date).split(".")[0];
-  const n = data.rows.length;
-  const title = (NUMWORD[n] || String(n)) + " Crowns of " + year;
+  const title = "EU5 standings · " + data.world.date;
   const payload = JSON.stringify({ ...data, config: DEFAULT_CONFIG, fields: FIELDS })
     .replace(/</g, "\\u003c").replace(LINE_SEPS, (c) => "\\u" + c.charCodeAt(0).toString(16));
   const body = tpl.split("__TITLE__").join(title)
@@ -89,6 +82,7 @@ function sanitizeData(d) {
       if (STR.has(k)) o[k] = str(v);
       else if (k === "is_player") o[k] = v === true;
       else if (k === "flag") { if (isPng(v)) o[k] = v; }
+      else if (k === "color") o[k] = typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v) ? v : null;
       else if (["goods", "raw", "ranks", "score"].includes(k)) o[k] = numMap(v);
       else if (k.endsWith("_hist")) o[k] = numList(v);
       else o[k] = numOr0(v);
