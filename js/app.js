@@ -589,18 +589,26 @@ function runWorker(save, opts, onStage, onProgress) {
     const w = new Worker("js/worker.js");
     activeWorkers.add(w);
     const end = () => { w.terminate(); activeWorkers.delete(w); };
+    let stage = "starting";
     w.onmessage = (e) => {
       const m = e.data;
       if (m.type === "log") logLine(m.msg);
-      else if (m.type === "stage") onStage && onStage(m.msg);
+      else if (m.type === "stage") { stage = m.msg; onStage && onStage(m.msg); }
       else if (m.type === "progress") onProgress && onProgress(m.value);
       else if (m.type === "done") { end(); resolve(m.data); }
       else if (m.type === "error") { end(); reject(new BuildError(save.name + ": " + m.message, m.code)); }
     };
+    // The worker died without reporting (the browser stopped it, often for
+    // memory). Say where it got to; buildMany decides whether to retry.
     w.onerror = (e) => {
+      e.preventDefault();
       end();
-      reject(new BuildError("The background worker crashed: " + (e.message || "unknown error") +
-        (/memory/i.test(e.message || "") ? " — try closing other tabs." : "")));
+      const where = e.filename ? ` (${e.filename.split("/").pop()}:${e.lineno})` : "";
+      const err = new BuildError(`${save.name}: the background worker stopped while "${stage.replace(/…$/, "")}" — ` +
+        (e.message || "the browser gave no reason") + where);
+      err.crash = true;
+      logLine("! " + err.message);
+      reject(err);
     };
     w.postMessage({ save, game, opts });
   });
@@ -685,37 +693,65 @@ async function buildMany(items) {
     const runs = list.filter((c) => c.file);
     let done = 0;
     const multi = list.length > 1;
+    const notes = [];
+    let reduced = false; // newest save rebuilt without map/flags after crashes
     for (const c of runs) {
       const isNewest = c === newest;
       const label = multi ? `Save ${done + 1} of ${runs.length} (${c.date}): ` : "";
       const o = isNewest ? opts : { ...opts, flags: false, map: false };
       if (multi) logLine(`— ${c.file.name}${isNewest ? " (newest: full report)" : ""}`);
-      const data = await runWorker(c.file, o,
-        (s) => { $("stagetext").textContent = label + s; },
-        (v) => setBar($("buildbar"), (done + v) / runs.length));
-      c.full = data;
+      // A worker the browser stops is retried once, then - for the newest
+      // save - without the map, then without flags too, which are the
+      // memory-hungry parts. An older save that still fails is left out.
+      const tries = isNewest && (o.map || o.flags)
+        ? [o, o, { ...o, map: false }, { ...o, map: false, flags: false }] : [o, o];
+      let data = null, lastErr = null, used = o;
+      for (const attempt of tries) {
+        if (lastErr) logLine(`retrying ${c.file.name}` + (attempt.map !== o.map || attempt.flags !== o.flags
+          ? ` without ${!attempt.flags && o.flags ? "flags or map" : "the map"}` : ""));
+        try {
+          data = await runWorker(c.file, attempt,
+            (s) => { $("stagetext").textContent = label + s; },
+            (v) => setBar($("buildbar"), (done + v) / runs.length));
+          used = attempt;
+          break;
+        } catch (err) {
+          if (!err.crash) throw err;
+          lastErr = err;
+        }
+      }
       done++;
+      if (!data) {
+        if (isNewest) throw lastErr;
+        c.skip = true;
+        notes.push(`Left out ${c.file.name}: the browser kept stopping the worker reading it.`);
+        continue;
+      }
+      if (used !== o) reduced = true;
+      if (used !== o)
+        notes.push(`The ${!used.flags && o.flags ? "coats of arms and map were" : "map was"} left out: the browser kept stopping the worker while drawing ${!used.flags && o.flags ? "them" : "it"}.`);
+      c.full = data;
       noteRecent(c.entry, data.world);
     }
     if (newest.entry && newest.full) noteRecent(newest.entry, newest.full.world);
+    const kept = list.filter((c) => !c.skip);
 
     // 4. Assemble: the newest save's report, plus every snapshot.
-    const snaps = list.map((c) => (c.full ? toSnap(c.full) : c.snap));
+    const snaps = kept.map((c) => (c.full ? toSnap(c.full) : c.snap));
     const report = { ...newest.full, timeline: { snapshots: snaps } };
-    const notes = [];
     if (!game && (opts.flags || opts.map) && newest.file)
       notes.push("Link your EU5 install (step 2) to add coats of arms and the political map.");
-    else if (opts.map && newest.file && !newest.full.map)
+    else if (opts.map && newest.file && !newest.full.map && !reduced)
       notes.push("The map couldn't be drawn — open Details above for the reason.");
     if (dupes.length)
       notes.push(`Skipped ${dupes.join(", ")} — another save has the same in-game date.`);
     const camps = new Set(snaps.map((s) => s.playthrough).filter(Boolean));
     if (camps.size > 1)
       notes.push("These saves look like they come from different campaigns, so the comparisons may not mean much.");
-    const source = multi ? `${list.length} saves, ${list[0].date} to ${newest.date}` : (newest.file || {}).name || newest.full.world.save;
+    const source = kept.length > 1 ? `${kept.length} saves, ${kept[0].date} to ${newest.date}` : (newest.file || {}).name || newest.full.world.save;
     clearInterval(timer);
     await showReport(report, source, notes);
-    showStatus(multi ? `Built from ${list.length} saves (${list[0].date} – ${newest.date})` : `Built from ${source}`, "done");
+    showStatus(kept.length > 1 ? `Built from ${kept.length} saves (${kept[0].date} – ${newest.date})` : `Built from ${source}`, "done");
   } catch (err) {
     clearInterval(timer);
     fail(err.message, err.code);

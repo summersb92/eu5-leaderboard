@@ -1533,6 +1533,11 @@ async function resolveGame(src) {
   return fs;
 }
 
+// Anything that escapes the handler below: report it before the worker dies.
+self.addEventListener("error", (e) => log(`worker error: ${e.message} (${e.lineno}:${e.colno})`));
+self.addEventListener("unhandledrejection", (e) =>
+  log("worker error: " + ((e.reason && e.reason.stack) || e.reason)));
+
 self.onmessage = async (e) => {
   const { save, game, opts } = e.data;
   const t0 = performance.now();
@@ -1578,6 +1583,7 @@ self.onmessage = async (e) => {
     progress(1);
     postMessage({ type: "done", data });
   } catch (err) {
+    if (!(err instanceof UserError) && err && err.stack) log(err.stack);
     postMessage({
       type: "error",
       code: err instanceof UserError ? err.code : "internal",
