@@ -46,6 +46,16 @@ Output matches the Python script: extracted numbers are identical, and the
 map is within one colour level per pixel. Flags differ only by resampling
 filter.
 
+## Share links
+
+**Generate link** stores the report (with the sharer's column layout) as a
+secret gist on the sharer's GitHub account, via a token with only the `gist`
+scope, and gives a link like `…/eu5-leaderboard/?view=<gist id>&u=<owner>`.
+That opens the page in viewer mode: the report only, no upload controls.
+Sharing the same campaign again updates the same gist, so the link stays
+the same. Viewers read the gist through the GitHub API (60 requests an hour
+per viewer) and fall back to the raw gist file.
+
 ## Military estimates
 
 Saves don't record discipline, levy combat ability or potential levies, so

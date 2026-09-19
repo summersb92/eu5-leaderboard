@@ -145,6 +145,32 @@ progress.bar:indeterminate::-moz-progress-bar{background:transparent}
 .savename{font-size:12.5px; color:var(--ink-3); overflow-wrap:anywhere}
 .notice{margin:8px 0 0; font-size:13.5px; color:var(--ink-2); padding:10px 14px; border-radius:5px;
   background:var(--accent-wash); border-left:3px solid var(--accent)}
+/* sharing */
+.sharepanel{margin:12px 0 4px; padding:16px 18px; border:1px solid var(--line); border-radius:8px; background:var(--surface)}
+.sharehead{display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 14px; margin-bottom:8px}
+.sharehead h3{font-family:Fraunces,Georgia,serif; font-weight:600; font-size:19px; margin:0}
+.sharenote,.sharestep,.sharewhat,.shareexisting{font-size:13.5px; color:var(--ink-2); margin:6px 0}
+.sharehow{margin:6px 0 10px; padding-left:20px; font-size:13.5px; color:var(--ink-2)}
+.sharehow li{margin:4px 0}
+.sharetokrow,.sharelink,.sharebtns{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:8px}
+.sharetokrow input[type=password],.sharelink input{flex:1 1 260px; min-width:0; font:13px "IBM Plex Mono",monospace;
+  color:var(--ink); background:var(--raised); border:1px solid var(--line); border-radius:4px; padding:8px 10px}
+.shareremember{display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-2)}
+.shareremember input{accent-color:var(--accent); margin:0}
+.sharebusy{display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--ink-2)}
+.sharefoot{margin:8px 0 0; font-size:12px}
+a.btn{text-decoration:none; display:inline-block}
+/* viewer mode: a shared link shows only the report */
+.viewbar{border-bottom:1px solid var(--line); background:var(--surface)}
+.viewbarin{display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 16px; padding-block:14px}
+.viewtitle{font-family:Fraunces,Georgia,serif; font-weight:700; font-size:18px}
+.viewtitle b{color:var(--accent); font-weight:600}
+.viewmeta{font-size:12.5px; color:var(--ink-3)}
+.viewbarin .spacer{flex:1}
+.viewown{font-size:13px}
+html.viewer .mast, html.viewer .steps, html.viewer .help, html.viewer #sharebtn, html.viewer #addsave,
+html.viewer #rebuild, html.viewer #sharepanel, html.viewer .savename{display:none!important}
+html.viewer .result{margin-top:0; border-top:0}
 #report{display:block; width:100%; height:80vh; border:0; background:var(--bg)}
 
 .help{padding-block:56px 0}

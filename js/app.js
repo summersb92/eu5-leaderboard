@@ -45,10 +45,10 @@ const loadTemplate = () => (templatePromise ||= fetch("report-template.html").th
   return r.text();
 }));
 
-function buildHtml(tpl, data) {
+function buildHtml(tpl, data, extra) {
   const year = String(data.world.date).split(".")[0];
   const title = "EU5 standings · " + data.world.date;
-  const payload = JSON.stringify({ ...data, config: DEFAULT_CONFIG, fields: FIELDS })
+  const payload = JSON.stringify({ ...data, config: cleanConfig(extra && extra.config), shared: !!(extra && extra.shared), fields: FIELDS })
     .replace(/</g, "\\u003c").replace(LINE_SEPS, (c) => "\\u" + c.charCodeAt(0).toString(16));
   const body = tpl.split("__TITLE__").join(title)
     .split("__YEAR__").join(year)
@@ -62,6 +62,17 @@ function buildHtml(tpl, data) {
     "</head>\n<body>\n" +
     body.slice(split) +
     "\n</body>\n</html>\n";
+}
+
+/* The sharer's layout, as far as it names things the report knows. */
+function cleanConfig(c) {
+  const out = { standings: DEFAULT_CONFIG.standings, ledger: DEFAULT_CONFIG.ledger };
+  if (!c || typeof c !== "object") return out;
+  const keys = (a) => (Array.isArray(a) ? a.filter((k) => typeof k === "string" && k in FIELDS) : []);
+  if (keys(c.standings).length) out.standings = keys(c.standings);
+  if (keys(c.ledger).length) out.ledger = keys(c.ledger);
+  for (const k of ["scatter", "timeline"]) if (typeof c[k] === "string" && /^\w{1,30}$/.test(c[k])) out[k] = c[k];
+  return out;
 }
 
 /* Coerce everything to the types the report expects. Save-derived data
@@ -826,14 +837,210 @@ function addToCurrent(files) {
 }
 
 // ==========================================================================
+// Share links
+// ==========================================================================
+// A static site has nowhere to keep a report, so a link stores it as a
+// secret (unlisted) GitHub Gist on the sharer's own account, using a token
+// that can only manage gists. The link opens this page in viewer mode, which
+// fetches the gist and shows the report without any upload controls. Links
+// are kept per campaign and updated in place, so players keep one link.
+const GIST_FILE = "eu5-standings.json";
+const TOKEN_KEY = "eu5gisttoken", LINKS_KEY = "eu5links";
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
+let sessionToken = null; // when the sharer chose not to remember it
+
+const shareToken = () => sessionToken || lsGet(TOKEN_KEY);
+function savedLinks() {
+  try { return JSON.parse(lsGet(LINKS_KEY) || "{}") || {}; } catch (e) { return {}; }
+}
+const campaignKey = () => (current && current.data.world.playthrough) || "save:" + (current ? current.base : "");
+const viewUrl = (id, owner) => {
+  const u = new URL(location.href.split(/[?#]/)[0]);
+  u.searchParams.set("view", id);
+  if (owner) u.searchParams.set("u", owner);
+  return u.toString();
+};
+
+/* What a viewer needs: the report data plus how the sharer had it laid out. */
+function sharePayload() {
+  const parse = (k) => { try { return JSON.parse(lsGet(k)); } catch (e) { return null; } };
+  const cols = parse("eu5cols");
+  return {
+    eu5leaderboard: 1,
+    shared_at: new Date().toISOString(),
+    config: {
+      standings: Array.isArray(cols) && cols.length ? cols : DEFAULT_CONFIG.standings,
+      ledger: DEFAULT_CONFIG.ledger,
+      scatter: lsGet("eu5scatter"), timeline: lsGet("eu5timeline"),
+    },
+    data: current.data,
+  };
+}
+
+async function gistApi(method, path, body) {
+  const r = await fetch("https://api.github.com" + path, {
+    method,
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: "Bearer " + shareToken(),
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error(json.message || "GitHub said " + r.status);
+    err.status = r.status;
+    throw err;
+  }
+  return json;
+}
+
+function setShareState(state) {
+  for (const id of ["sharesetup", "sharebusy", "sharedone"]) $(id).hidden = id !== state;
+  $("shareerr").hidden = true;
+}
+function shareError(msg) {
+  const e = $("shareerr");
+  e.hidden = false;
+  e.textContent = msg;
+}
+
+function openShare() {
+  const panel = $("sharepanel");
+  panel.hidden = !panel.hidden;
+  if (panel.hidden) return;
+  const link = savedLinks()[campaignKey()];
+  $("shareexisting").hidden = !link;
+  if (link) $("shareexisting").querySelector("a").href = link.url;
+  $("shareforget").hidden = !shareToken();
+  setShareState(shareToken() ? null : "sharesetup");
+  $("sharego").textContent = link ? "Update the link" : "Create the link";
+  $("sharenew").hidden = !link;
+  $("sharego").hidden = false;
+  $("sharebtns").hidden = !shareToken();
+}
+
+async function publishShare(fresh) {
+  if (!current) return;
+  if (!shareToken()) { setShareState("sharesetup"); return; }
+  setShareState("sharebusy");
+  const links = savedLinks(), key = campaignKey(), prev = fresh ? null : links[key];
+  const w = current.data.world;
+  const body = {
+    description: `EU5 standings ${w.date} (${current.data.rows.length} nations) - EU5 Leaderboard`,
+    files: { [GIST_FILE]: { content: JSON.stringify(sharePayload()) } },
+  };
+  try {
+    let gist;
+    if (prev) {
+      try {
+        gist = await gistApi("PATCH", "/gists/" + prev.id, body);
+      } catch (e) {
+        if (e.status !== 404) throw e;
+        gist = null; // deleted since: make a new one
+      }
+    }
+    if (!gist) gist = await gistApi("POST", "/gists", { ...body, public: false });
+    const url = viewUrl(gist.id, gist.owner && gist.owner.login);
+    links[key] = { id: gist.id, url, date: w.date };
+    lsSet(LINKS_KEY, JSON.stringify(links));
+    $("shareurl").value = url;
+    $("shareopen").href = url;
+    $("sharewhat").textContent = prev && gist.id === prev.id
+      ? `Updated to ${w.date}. It's the same link as before, so anyone who has it now sees this report.`
+      : `New link for this campaign. Next time you share it, the same link is updated.`;
+    setShareState("sharedone");
+    $("sharebtns").hidden = true;
+  } catch (e) {
+    setShareState(null);
+    $("sharebtns").hidden = false;
+    if (e.status === 401) {
+      shareError("GitHub didn't accept that token. It may have expired or been revoked; enter a new one.");
+      forgetToken();
+      setShareState("sharesetup");
+    } else if (e.status === 403 || e.status === 404) {
+      shareError("That token can't create gists; make one with the “gist” scope (link below).");
+      forgetToken();
+      setShareState("sharesetup");
+    } else if (e.status === 422 || e.status === 413) {
+      shareError("GitHub turned the report down as too large. Try building it without the political map.");
+    } else {
+      shareError("Couldn't create the link: " + (e.message || e) + ".");
+    }
+  }
+}
+
+function saveTokenAndShare() {
+  const t = $("sharetoken").value.trim();
+  if (!/^(ghp_|github_pat_|gho_)[A-Za-z0-9_]{20,}$/.test(t)) {
+    shareError("That doesn't look like a GitHub token (they start with ghp_ or github_pat_).");
+    return;
+  }
+  $("sharetoken").value = "";
+  if ($("shareremember").checked) { lsSet(TOKEN_KEY, t); sessionToken = null; } else sessionToken = t;
+  $("shareforget").hidden = false;
+  publishShare(false);
+}
+
+function forgetToken() {
+  sessionToken = null;
+  lsSet(TOKEN_KEY, null);
+  $("shareforget").hidden = true;
+}
+
+/* ---- viewer mode: ?view=<gist id>[&u=<owner>] ---- */
+async function loadShared(id, owner) {
+  document.documentElement.classList.add("viewer");
+  $("viewbar").hidden = false;
+  showStatus("Loading the shared standings…");
+  $("buildbar").hidden = true;
+  const bad = () => fail("This link doesn't work any more: the report may have been deleted, or the link was copied incompletely.");
+  if (!/^[0-9a-f]{20,40}$/i.test(id)) return bad();
+  try {
+    let text = null;
+    try {
+      const r = await fetch("https://api.github.com/gists/" + id, { headers: { Accept: "application/vnd.github+json" } });
+      if (r.status === 404) return bad();
+      if (r.ok) {
+        const g = await r.json();
+        const f = g.files && g.files[GIST_FILE];
+        if (!f) return bad();
+        text = f.truncated ? await fetch(f.raw_url).then((x) => x.text()) : f.content;
+      }
+    } catch (e) { /* fall through to the raw address */ }
+    // the API allows each viewer 60 requests an hour; the raw file has no limit
+    if (text == null && owner && /^[A-Za-z0-9-]{1,39}$/.test(owner)) {
+      const r = await fetch(`https://gist.githubusercontent.com/${owner}/${id}/raw/${GIST_FILE}`);
+      if (r.ok) text = await r.text();
+    }
+    if (text == null) throw new Error("GitHub didn't send the report — try again in a minute.");
+    const payload = JSON.parse(text);
+    if (!payload || !payload.data) return bad();
+    const w = payload.data.world || {};
+    await showReport(payload.data, `Shared standings · ${w.date || ""}`, [], { config: payload.config, shared: true });
+    $("status").hidden = true;
+    const when = payload.shared_at ? new Date(payload.shared_at) : null;
+    $("viewmeta").textContent = [w.date ? "In-game date " + w.date : null,
+      when && !isNaN(when) ? "shared " + when.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : null]
+      .filter(Boolean).join(" · ");
+  } catch (e) {
+    fail(e instanceof SyntaxError ? "The shared report is damaged and can't be shown." : e.message);
+  }
+}
+
+// ==========================================================================
 // Showing and saving the report
 // ==========================================================================
-async function showReport(raw, sourceName, notes) {
+async function showReport(raw, sourceName, notes, extra) {
   const data = sanitizeData(raw);
-  const html = buildHtml(await loadTemplate(), data);
+  const html = buildHtml(await loadTemplate(), data, extra);
   const base = (data.world.save || sourceName).replace(/\.(eu5|json)$/i, "")
     .replace(/ standings$/i, "").replace(/[\\/:*?"<>|]+/g, "_");
   current = { data, html, base };
+  $("sharepanel").hidden = true;
   $("result").hidden = false;
   $("savename").textContent = sourceName;
   const notice = $("notice");
@@ -924,6 +1131,25 @@ function init() {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   });
 
+  $("sharebtn").addEventListener("click", openShare);
+  $("sharego").addEventListener("click", () => publishShare(false));
+  $("sharenew").addEventListener("click", () => publishShare(true));
+  $("sharetokgo").addEventListener("click", saveTokenAndShare);
+  $("sharetoken").addEventListener("keydown", (e) => { if (e.key === "Enter") saveTokenAndShare(); });
+  $("shareforget").addEventListener("click", () => { forgetToken(); setShareState("sharesetup"); $("sharebtns").hidden = true; });
+  $("sharecopy").addEventListener("click", () => {
+    const btn = $("sharecopy"), box = $("shareurl");
+    const done = (ok) => { btn.textContent = ok ? "Copied" : "Press Ctrl+C"; setTimeout(() => { btn.textContent = "Copy link"; }, 2000); };
+    navigator.clipboard && navigator.clipboard.writeText(box.value).then(() => done(true), () => { box.select(); done(false); });
+  });
+
+  const view = new URLSearchParams(location.search);
+  if (view.get("view")) {
+    // someone opened a shared link: show only the report
+    loadShared(view.get("view"), view.get("u"));
+    loadTemplate().catch(() => {});
+    return;
+  }
   restoreGame();
   loadTemplate().catch(() => {});
 }

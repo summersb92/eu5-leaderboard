@@ -12,6 +12,11 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+<div class="viewbar" id="viewbar" hidden>
+  <div class="wrap viewbarin"><span class="viewtitle">EU5 Leaderboard <b>&middot; shared standings</b></span>
+    <span class="viewmeta" id="viewmeta"></span><span class="spacer"></span>
+    <a class="viewown" href="./">Make your own from a save &rarr;</a></div>
+</div>
 <div class="wrap">
   <header class="mast">
     <p class="eyebrow"><span>Europa Universalis V</span></p>
@@ -92,6 +97,7 @@
     <div class="toolbar">
       <span class="savename mono" id="savename"></span>
       <span class="spacer"></span>
+      <button class="btn primary" id="sharebtn" type="button">Generate link</button>
       <button class="btn primary" id="addsave" type="button" hidden>Add a save to compare</button>
       <button class="btn" id="rebuild" type="button" hidden>Rebuild</button>
       <button class="btn" id="dlhtml" type="button">Download report</button>
@@ -99,6 +105,38 @@
       <button class="btn" id="opentab" type="button">Open in new tab</button>
     </div>
     <p class="notice" id="notice" hidden></p>
+    <div class="sharepanel" id="sharepanel" hidden>
+      <div class="sharehead"><h3>Share this dashboard</h3>
+        <span class="sharenote">Anyone with the link sees this report, without the upload controls. No account needed to view it.</span></div>
+      <p class="shareexisting" id="shareexisting" hidden>This campaign already has a link &mdash; <a href="#" target="_blank" rel="noopener">open it</a>.
+        Updating it puts this report behind the same link.</p>
+      <div id="sharesetup" hidden>
+        <p class="sharestep">Links are stored as a secret gist on your GitHub account (unlisted: only people with the link can find it). One-time setup:</p>
+        <ol class="sharehow">
+          <li><a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=EU5%20Leaderboard%20links" target="_blank" rel="noopener">Create a GitHub token</a>
+            with only the <code>gist</code> box ticked (that's already done by this link) and press <em>Generate token</em>.</li>
+          <li>Paste it here. It's only ever sent to GitHub, and can't touch your repositories.</li>
+        </ol>
+        <div class="sharetokrow">
+          <input type="password" id="sharetoken" placeholder="ghp_…" autocomplete="off" spellcheck="false" aria-label="GitHub token">
+          <label class="shareremember"><input type="checkbox" id="shareremember" checked> Remember on this computer</label>
+          <button class="btn primary" id="sharetokgo" type="button">Save and create link</button>
+        </div>
+      </div>
+      <div class="sharebtns" id="sharebtns" hidden>
+        <button class="btn primary" id="sharego" type="button">Create the link</button>
+        <button class="btn quiet" id="sharenew" type="button" hidden>Make a separate new link</button>
+      </div>
+      <p class="sharebusy" id="sharebusy" hidden><span class="spinner" aria-hidden="true"></span> Uploading the report to your gist&hellip;</p>
+      <div id="sharedone" hidden>
+        <div class="sharelink"><input type="text" id="shareurl" readonly aria-label="Share link">
+          <button class="btn primary" id="sharecopy" type="button">Copy link</button>
+          <a class="btn" id="shareopen" href="#" target="_blank" rel="noopener">Open</a></div>
+        <p class="sharewhat" id="sharewhat"></p>
+      </div>
+      <p class="errorbox" id="shareerr" hidden></p>
+      <p class="sharefoot"><button class="linkbtn" id="shareforget" type="button" hidden>Forget my GitHub token</button></p>
+    </div>
   </div>
   <iframe id="report" title="Leaderboard report" allow="clipboard-write"></iframe>
 </section>
@@ -144,6 +182,13 @@
           followed through tag changes (Castile becoming Spain, say). Even a single save charts population, tax
           base and economic base year by year, because the game keeps that history. <em>Download data</em> keeps
           every save's numbers, so next time you can drop that file plus your newest save.</p></details>
+      <details><summary>How do share links work?</summary>
+        <p><em>Generate link</em> saves the report as a secret gist on your GitHub account and gives you a short link.
+          Anyone with it sees the report as you had it laid out, without any upload controls, and needs no account.
+          Secret gists are unlisted, not password-protected: anyone who gets the link can open it. Sharing the same
+          campaign again updates the same link. It needs a GitHub token with only the <code>gist</code> permission,
+          kept in this browser if you choose and only ever sent to GitHub. Delete a link by deleting the gist at
+          <a href="https://gist.github.com/" target="_blank" rel="noopener">gist.github.com</a>.</p></details>
       <details><summary>What can I do with the report?</summary>
         <p><em>Download report</em> saves one self-contained HTML file you can send to anyone &mdash; it opens
           in any browser with nothing to install. <em>Download data</em> saves the extracted numbers as JSON;

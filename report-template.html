@@ -357,7 +357,7 @@ const worldArmy=R.reduce((a,r)=>a+N(r.army),0);
 [["Nations shown",R.length,nPlayers+" human"],["Countries on the map",int(W.n_countries),""],
  ["World population",(W.world_pop/1000).toFixed(1),"million"],
  ["Locations held",int(R.reduce((a,r)=>a+r.locations,0)),"of "+int(W.world_locations)],
- ["Standing armies",int(worldArmy*1000),"men"]
+ ["Armies at full strength",int(worldArmy*1000),"men"]
 ].forEach(([k,v,s])=>{const d=el("div","fact"); d.appendChild(el("dt",null,k));
   d.appendChild(el("dd",null,v+(s?' <small>'+s+'</small>':""))); $("facts").appendChild(d);});
 
@@ -427,7 +427,8 @@ function savedCols(){
   try{ const v=localStorage.getItem(STORE); if(v) return JSON.parse(v); }catch(e){}
   return null;
 }
-let chosen=(savedCols()||CFG.standings||["gp_rank","tag","pop","taxbase","econbase",
+// a shared link shows the sharer's layout rather than this browser's saved one
+let chosen=((D.shared?null:savedCols())||CFG.standings||["gp_rank","tag","pop","taxbase","econbase",
              "wealth","control","locations","levies","regulars","mercs"])
            .filter(k=>k in FIELDS);
 if(!chosen.includes("tag")) chosen.unshift("tag");
@@ -656,7 +657,7 @@ function chartPng(svg,title,sub){
     return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*mag;};
   const MKEY="eu5scatter";
   let mode=MODES[0];
-  try{ const v=localStorage.getItem(MKEY); mode=MODES.find(m=>m.k===v)||mode; }catch(e){}
+  try{ const v=D.shared&&CFG.scatter?CFG.scatter:localStorage.getItem(MKEY); mode=MODES.find(m=>m.k===v)||mode; }catch(e){}
 
   function draw(){
     const X=r=>Math.max(0,N(r[mode.x])), Y=r=>Math.max(0,N(r[mode.y]));
@@ -815,7 +816,7 @@ function chartPng(svg,title,sub){
     return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*mag;};
   const KEY="eu5timeline";
   let mode=avail[0];
-  try{ const v=localStorage.getItem(KEY); mode=avail.find(m=>m.k===v)||mode; }catch(e){}
+  try{ const v=D.shared&&CFG.timeline?CFG.timeline:localStorage.getItem(KEY); mode=avail.find(m=>m.k===v)||mode; }catch(e){}
   const hidden=new Set();
   let view=null; // what the last draw put on screen, for the hover tooltip
 
