@@ -22,7 +22,14 @@ are never uploaded and the site needs no server.
    junction outside `Program Files` once (the page shows the command) and
    pick that. Firefox and Safari use a plain folder input with no such
    restriction and no memory.
-4. **Download report** saves a self-contained HTML file to share.
+4. *(Optional)* Compare saves over time: give it two or more saves from
+   the same campaign (pick or drop them together, tick them under **Recent
+   saves**, or use **Add a save to compare** on a built report). The newest
+   save becomes the report; an **Over time** section charts each figure per
+   nation and tabulates what changed between any two saves, and the
+   standings can show each figure's change. Nations are matched by the
+   save's country id, so tag changes (Castile → Spain) are followed.
+5. **Download report** saves a self-contained HTML file to share.
    **Download data** saves the numbers as JSON; drop that back on the page to
    rebuild the report without the save.
 

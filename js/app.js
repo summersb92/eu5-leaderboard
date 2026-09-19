@@ -76,7 +76,7 @@ function sanitizeData(d) {
   const numList = (a) => (Array.isArray(a) ? a.map(numOr0) : []);
   const isPng = (v) => typeof v === "string" && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(v);
   const STR = new Set(["id", "tag", "name", "player"]);
-  const rows = d.rows.filter((r) => r && typeof r === "object").map((r) => {
+  const cleanRow = (r) => {
     const o = {};
     for (const [k, v] of Object.entries(r)) {
       if (STR.has(k)) o[k] = str(v);
@@ -94,7 +94,10 @@ function sanitizeData(d) {
     for (const k of ["locations", "provinces", "gp_rank", "subunits", "advances", "wars", "rebels", "score_place"])
       o[k] = Math.trunc(numOr0(o[k] ?? (k === "gp_rank" ? 999 : 0)));
     return o;
-  });
+  };
+  const cleanRows = (list) => (Array.isArray(list) ? list : []).filter((r) => r && typeof r === "object").map(cleanRow);
+  const okDate = (v) => (/^[\d.?]+$/.test(str(v)) ? str(v) : "?");
+  const rows = cleanRows(d.rows);
   const w = d.world;
   const date = /^[\d.?]+$/.test(str(w.date)) ? str(w.date) : "?";
   const world = {
@@ -102,6 +105,7 @@ function sanitizeData(d) {
     world_locations: numOr0(w.world_locations), date, version: str(w.version),
     multiplayer: w.multiplayer === true, you: w.you == null ? null : str(w.you),
     n_players: numOr0(w.n_players), wars_live: numOr0(w.wars_live), save: str(w.save),
+    playthrough: w.playthrough == null ? null : str(w.playthrough),
   };
   let map;
   if (d.map && typeof d.map === "object" && isPng(d.map.image)) {
@@ -115,7 +119,18 @@ function sanitizeData(d) {
       has_subjects: d.map.has_subjects === true, bg: hexc(d.map.bg), land: hexc(d.map.land),
     };
   }
-  return map ? { rows, world, map } : { rows, world };
+  const out = map ? { rows, world, map } : { rows, world };
+  // Earlier saves of the same campaign, for the "Over time" section.
+  const tl = d.timeline && Array.isArray(d.timeline.snapshots) ? d.timeline.snapshots : [];
+  const snaps = tl.filter((s) => s && typeof s === "object").map((s) => ({
+    date: okDate(s.date), save: str(s.save), playthrough: s.playthrough == null ? null : str(s.playthrough),
+    rows: cleanRows(s.rows).map((r) => {
+      for (const k of ["goods", "raw", "ranks", "score", "flag"]) delete r[k];
+      return r;
+    }),
+  })).filter((s) => s.date !== "?");
+  if (snaps.length) out.timeline = { snapshots: snaps };
+  return out;
 }
 
 // ==========================================================================
@@ -334,14 +349,16 @@ function onDrop(e) {
   const item = dt.items && dt.items[0];
   const entry = item && item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
   if (entry && entry.isDirectory) return linkDroppedFolder(entry);
-  const file = dt.files[0];
-  if (!file) return;
-  // Must be requested during the drop event itself; lets the save be
-  // remembered in the recent list (Chrome/Edge).
-  const pending = canPickFile && item && item.getAsFileSystemHandle ? item.getAsFileSystemHandle() : null;
-  Promise.resolve(pending).catch(() => null)
+  // File handles must be requested during the drop event itself; they let
+  // the saves be remembered in the recent list (Chrome/Edge).
+  const items = [...(dt.items || [])].filter((it) => it.kind === "file");
+  const pending = items.map((it) => (canPickFile && it.getAsFileSystemHandle ? it.getAsFileSystemHandle() : null));
+  const files = [...dt.files];
+  if (!files.length) return;
+  Promise.all(files.map((file, i) => Promise.resolve(pending[i]).catch(() => null)
     .then((h) => (h ? rememberSave(h, file) : null)).catch(() => null)
-    .then((rec) => handleFile(file, rec));
+    .then((entry) => ({ file, entry }))))
+    .then(handleFiles);
 }
 
 async function forgetGame() {
@@ -402,31 +419,44 @@ function noteRecent(entry, world) {
   renderRecent();
 }
 
-async function openRecent(entry) {
-  const h = entry.handle;
-  let perm = await h.queryPermission({ mode: "read" }).catch(() => "denied");
-  if (perm !== "granted") perm = await h.requestPermission({ mode: "read" }).catch(() => "denied");
-  if (perm !== "granted") {
-    fail(`The browser didn't allow access to ${entry.name}.`);
-    return;
+/* Reopen remembered saves (asking permission where needed), then build or
+   add them. Several at once become a timeline. */
+async function openEntries(entries, add) {
+  const files = [];
+  for (const entry of entries) {
+    const h = entry.handle;
+    let perm = await h.queryPermission({ mode: "read" }).catch(() => "denied");
+    if (perm !== "granted") perm = await h.requestPermission({ mode: "read" }).catch(() => "denied");
+    if (perm !== "granted") {
+      fail(`The browser didn't allow access to ${entry.name}` +
+        (entries.length > 1 ? " — click again to be asked for each file." : "."));
+      return;
+    }
+    let file;
+    try {
+      file = await h.getFile();
+    } catch (e) {
+      fail(`${entry.name} isn't there any more — it may have been moved, renamed or deleted.`);
+      entry.missing = true;
+      renderRecent();
+      return;
+    }
+    files.push({ file, entry: await rememberSave(h, file) });
   }
-  let file;
-  try {
-    file = await h.getFile();
-  } catch (e) {
-    fail(`${entry.name} isn't there any more — it may have been moved, renamed or deleted.`);
-    entry.missing = true;
-    renderRecent();
-    return;
-  }
-  handleFile(file, await rememberSave(h, file));
+  picked.clear();
+  renderRecent();
+  (add ? addToCurrent : handleFiles)(files);
 }
+const openRecent = (entry) => openEntries([entry], false);
 
 async function forgetRecent(entry) {
   recent = entry ? recent.filter((r) => r !== entry) : [];
+  picked.clear();
   await storeRecent();
   renderRecent();
 }
+
+const picked = new Set(); // recent entries ticked for comparing
 
 function renderRecent() {
   const box = $("recent"), list = $("recentlist");
@@ -434,6 +464,15 @@ function renderRecent() {
   list.textContent = "";
   for (const r of recent) {
     const li = document.createElement("li");
+    const tick = document.createElement("input");
+    tick.type = "checkbox";
+    tick.className = "recenttick";
+    tick.checked = picked.has(r);
+    tick.setAttribute("aria-label", "Compare " + r.name);
+    tick.addEventListener("change", () => {
+      tick.checked ? picked.add(r) : picked.delete(r);
+      updateCompare();
+    });
     const open = document.createElement("button");
     open.type = "button";
     open.className = "recentopen" + (r.missing ? " missing" : "");
@@ -453,20 +492,32 @@ function renderRecent() {
     del.textContent = "×";
     del.setAttribute("aria-label", "Remove " + r.name + " from recent saves");
     del.addEventListener("click", () => forgetRecent(r));
-    li.append(open, del);
+    li.append(tick, open, del);
     list.appendChild(li);
   }
+  updateCompare();
 }
 
-async function pickSave() {
+function updateCompare() {
+  for (const r of picked) if (!recent.includes(r)) picked.delete(r);
+  const btn = $("recentcompare");
+  btn.hidden = recent.length < 2;
+  btn.disabled = picked.size < 2;
+  btn.textContent = picked.size >= 2 ? `Compare ${picked.size} saves` : "Tick two or more to compare";
+}
+
+let addMode = false; // the plain <input> fallback serves both buttons
+async function pickSave(add) {
   if (!canPickFile) {
+    addMode = !!add;
     $("saveinput").click();
     return;
   }
-  let handle;
+  let handles;
   try {
-    [handle] = await window.showOpenFilePicker({
+    handles = await window.showOpenFilePicker({
       id: "eu5-saves",
+      multiple: true,
       types: [{
         description: "EU5 saves or leaderboard data",
         accept: { "application/octet-stream": [".eu5"], "application/json": [".json"] },
@@ -475,14 +526,22 @@ async function pickSave() {
   } catch (e) {
     return; // cancelled
   }
-  const file = await handle.getFile();
-  handleFile(file, await rememberSave(handle, file));
+  const files = [];
+  for (const h of handles) {
+    const file = await h.getFile();
+    files.push({ file, entry: await rememberSave(h, file) });
+  }
+  (add ? addToCurrent : handleFiles)(files);
 }
 
 // ==========================================================================
-// Running a build
+// Running builds
 // ==========================================================================
-let worker = null, timer = null, current = null, lastSave = null;
+// A report is built from one or more saves (or data files) of the same
+// campaign. The newest becomes the full report, with flags and map; the
+// others are read without them and kept as compact snapshots for the
+// "Over time" section.
+let timer = null, current = null, lastItems = null;
 
 /* value in 0..1, or null for an indeterminate bar */
 function setBar(bar, value) {
@@ -519,50 +578,148 @@ function options() {
   };
 }
 
-function build(save, entry) {
-  lastSave = save;
-  if (worker) worker.terminate();
+class BuildError extends Error {
+  constructor(msg, code) { super(msg); this.code = code; }
+}
+
+/* One worker run. onStage(text) and onProgress(0..1) report as it goes. */
+let activeWorkers = new Set();
+function runWorker(save, opts, onStage, onProgress) {
+  return new Promise((resolve, reject) => {
+    const w = new Worker("js/worker.js");
+    activeWorkers.add(w);
+    const end = () => { w.terminate(); activeWorkers.delete(w); };
+    w.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "log") logLine(m.msg);
+      else if (m.type === "stage") onStage && onStage(m.msg);
+      else if (m.type === "progress") onProgress && onProgress(m.value);
+      else if (m.type === "done") { end(); resolve(m.data); }
+      else if (m.type === "error") { end(); reject(new BuildError(save.name + ": " + m.message, m.code)); }
+    };
+    w.onerror = (e) => {
+      end();
+      reject(new BuildError("The background worker crashed: " + (e.message || "unknown error") +
+        (/memory/i.test(e.message || "") ? " — try closing other tabs." : "")));
+    };
+    w.postMessage({ save, game, opts });
+  });
+}
+
+// "1368.1.21" -> comparable number
+const dateKey = (d) => {
+  const p = String(d || "").split(".").map((x) => parseInt(x, 10) || 0);
+  return (p[0] || 0) * 10000 + (p[1] || 0) * 100 + (p[2] || 0);
+};
+
+/* Everything the timeline needs from a row: no flags, goods or ranks. */
+function compactRow(r) {
+  const o = {};
+  for (const [k, v] of Object.entries(r)) {
+    if (k === "flag" || k === "goods" || k === "raw" || k === "ranks" || k === "score") continue;
+    o[k] = v;
+  }
+  return o;
+}
+const toSnap = (data) => ({
+  date: data.world.date, save: data.world.save, playthrough: data.world.playthrough || null,
+  rows: data.rows.map(compactRow),
+});
+
+/* items: [{file, entry}] for saves and data files, or {snap} / {full} for
+   what an earlier report already holds. */
+async function buildMany(items) {
+  lastItems = items;
+  for (const w of activeWorkers) w.terminate();
+  activeWorkers.clear();
   $("log").textContent = "";
   $("errorbox").hidden = true;
   showStatus("Starting…");
   setBar($("buildbar"), 0);
   startTimer();
   const opts = options();
-  worker = new Worker("js/worker.js");
-  worker.onmessage = async (e) => {
-    const m = e.data;
-    if (m.type === "log") logLine(m.msg);
-    else if (m.type === "stage") $("stagetext").textContent = m.msg;
-    else if (m.type === "progress") setBar($("buildbar"), m.value);
-    else if (m.type === "done") {
-      clearInterval(timer);
-      worker.terminate();
-      worker = null;
-      const notes = [];
-      if (!game && (opts.flags || opts.map))
-        notes.push("Link your EU5 install (step 2) to add coats of arms and the political map.");
-      else if (opts.map && !m.data.map)
-        notes.push("The map couldn't be drawn — open Details above for the reason.");
-      try {
-        await showReport(m.data, save.name, notes);
-        showStatus(`Built from ${save.name}`, "done");
-        noteRecent(entry, m.data.world);
-      } catch (err) {
-        fail(err.message);
+  try {
+    // 1. Read data files, and the date of every save, so they can be ordered.
+    const cands = [];
+    const saves = items.filter((it) => it.file && !/\.json$/i.test(it.file.name));
+    for (const it of items) {
+      if (it.snap) cands.push({ date: it.snap.date, snap: it.snap });
+      else if (it.full) cands.push({ date: it.full.world.date, full: it.full });
+      else if (/\.json$/i.test(it.file.name)) {
+        let raw;
+        try {
+          raw = JSON.parse(await it.file.text());
+        } catch (e) {
+          throw new BuildError(it.file.name + " isn't valid JSON.");
+        }
+        const full = sanitizeData(raw);
+        cands.push({ date: full.world.date, full, entry: it.entry });
+        for (const s of (full.timeline && full.timeline.snapshots) || [])
+          if (s.date !== full.world.date) cands.push({ date: s.date, snap: s });
       }
-    } else if (m.type === "error") {
-      clearInterval(timer);
-      worker.terminate();
-      worker = null;
-      fail(m.message, m.code);
     }
-  };
-  worker.onerror = (e) => {
+    if (saves.length > 1) $("stagetext").textContent = `Putting ${saves.length} saves in date order…`;
+    for (const it of saves) {
+      const meta = await runWorker(it.file, { peek: true });
+      cands.push({ date: meta.date, playthrough: meta.playthrough, file: it.file, entry: it.entry });
+    }
+
+    // 2. One per in-game date (a live save beats a stored snapshot), oldest first.
+    cands.sort((a, b) => dateKey(a.date) - dateKey(b.date));
+    const rank = (c) => (c.file ? 3 : c.full ? 2 : 1);
+    const byDate = new Map();
+    const dupes = [];
+    for (const c of cands) {
+      const have = byDate.get(c.date);
+      if (!have) byDate.set(c.date, c);
+      else {
+        const [keep, drop] = rank(c) > rank(have) ? [c, have] : [have, c];
+        byDate.set(c.date, keep);
+        if (drop.file) dupes.push(drop.file.name);
+      }
+    }
+    const list = [...byDate.values()];
+    const newest = list[list.length - 1];
+
+    // 3. Read the saves: the newest in full, the rest without flags or map.
+    const runs = list.filter((c) => c.file);
+    let done = 0;
+    const multi = list.length > 1;
+    for (const c of runs) {
+      const isNewest = c === newest;
+      const label = multi ? `Save ${done + 1} of ${runs.length} (${c.date}): ` : "";
+      const o = isNewest ? opts : { ...opts, flags: false, map: false };
+      if (multi) logLine(`— ${c.file.name}${isNewest ? " (newest: full report)" : ""}`);
+      const data = await runWorker(c.file, o,
+        (s) => { $("stagetext").textContent = label + s; },
+        (v) => setBar($("buildbar"), (done + v) / runs.length));
+      c.full = data;
+      done++;
+      noteRecent(c.entry, data.world);
+    }
+    if (newest.entry && newest.full) noteRecent(newest.entry, newest.full.world);
+
+    // 4. Assemble: the newest save's report, plus every snapshot.
+    const snaps = list.map((c) => (c.full ? toSnap(c.full) : c.snap));
+    const report = { ...newest.full, timeline: { snapshots: snaps } };
+    const notes = [];
+    if (!game && (opts.flags || opts.map) && newest.file)
+      notes.push("Link your EU5 install (step 2) to add coats of arms and the political map.");
+    else if (opts.map && newest.file && !newest.full.map)
+      notes.push("The map couldn't be drawn — open Details above for the reason.");
+    if (dupes.length)
+      notes.push(`Skipped ${dupes.join(", ")} — another save has the same in-game date.`);
+    const camps = new Set(snaps.map((s) => s.playthrough).filter(Boolean));
+    if (camps.size > 1)
+      notes.push("These saves look like they come from different campaigns, so the comparisons may not mean much.");
+    const source = multi ? `${list.length} saves, ${list[0].date} to ${newest.date}` : (newest.file || {}).name || newest.full.world.save;
     clearInterval(timer);
-    fail("The background worker crashed: " + (e.message || "unknown error") +
-      (/memory/i.test(e.message || "") ? " — try closing other tabs." : ""));
-  };
-  worker.postMessage({ save, game, opts });
+    await showReport(report, source, notes);
+    showStatus(multi ? `Built from ${list.length} saves (${list[0].date} – ${newest.date})` : `Built from ${source}`, "done");
+  } catch (err) {
+    clearInterval(timer);
+    fail(err.message, err.code);
+  }
 }
 
 function fail(msg, code) {
@@ -579,30 +736,24 @@ function fail(msg, code) {
 }
 
 function maybeRebuild() {
-  $("rebuild").hidden = !(lastSave && current);
+  $("rebuild").hidden = !(current && lastItems && lastItems.some((it) => it.file));
+  $("addsave").hidden = !current;
 }
 
-async function loadJson(file, entry) {
-  lastSave = null;
-  $("log").textContent = "";
-  $("errorbox").hidden = true;
-  showStatus("Reading " + file.name + "…");
-  $("buildbar").hidden = true;
-  $("elapsed").textContent = "";
-  try {
-    const data = JSON.parse(await file.text());
-    await showReport(data, file.name, []);
-    showStatus(`Built from ${file.name}`, "done");
-    noteRecent(entry, data.world);
-  } catch (err) {
-    fail(err instanceof SyntaxError ? "That file isn't valid JSON." : err.message);
-  }
+/* files: [{file, entry}] */
+function handleFiles(files) {
+  files = files.filter((f) => f && f.file);
+  if (files.length) buildMany(files);
 }
+const handleFile = (file, entry) => handleFiles([{ file, entry }]);
 
-function handleFile(file, entry) {
-  if (!file) return;
-  if (/\.json$/i.test(file.name)) loadJson(file, entry);
-  else build(file, entry);
+/* Add saves to what's on screen: the current report and its snapshots
+   stay, the new files are read, and everything is rebuilt as a timeline. */
+function addToCurrent(files) {
+  if (!current) return handleFiles(files);
+  const snaps = (current.data.timeline && current.data.timeline.snapshots) || [];
+  const keep = [{ full: current.data }, ...snaps.filter((s) => s.date !== current.data.world.date).map((snap) => ({ snap }))];
+  buildMany([...keep, ...files]);
 }
 
 // ==========================================================================
@@ -653,16 +804,22 @@ function download(name, type, content) {
 function init() {
   const drop = $("drop"), input = $("saveinput");
   drop.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickSave(); }
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickSave(false); }
   });
   drop.addEventListener("click", (e) => {
     if (e.target.closest("a")) return;
     e.preventDefault();
-    pickSave();
+    pickSave(false);
   });
   $("recentclear").addEventListener("click", () => forgetRecent(null));
   loadRecent();
-  input.addEventListener("change", () => { handleFile(input.files[0]); input.value = ""; });
+  input.addEventListener("change", () => {
+    const files = [...input.files].map((file) => ({ file, entry: null }));
+    input.value = "";
+    (addMode ? addToCurrent : handleFiles)(files);
+  });
+  $("recentcompare").addEventListener("click", () => openEntries(recent.filter((r) => picked.has(r)), false));
+  $("addsave").addEventListener("click", () => pickSave(true));
   for (const zone of [drop, $("step-game")]) {
     ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, () => zone.classList.add("over")));
     zone.addEventListener("dragleave", (e) => {
@@ -686,7 +843,7 @@ function init() {
     e.target.value = "";
   });
 
-  $("rebuild").addEventListener("click", () => lastSave && build(lastSave));
+  $("rebuild").addEventListener("click", () => lastItems && buildMany(lastItems));
   $("dlhtml").addEventListener("click", () => current &&
     download(current.base + " standings.html", "text/html", current.html));
   $("dljson").addEventListener("click", () => current &&

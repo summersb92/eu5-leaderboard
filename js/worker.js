@@ -1216,6 +1216,7 @@ async function extract(save, sections, topAi = 0) {
   const youTag = m ? m[1] : null;
   const date = (metaTxt.match(/\n\tdate=([\d.]+)/) || [null, "?"])[1];
   const version = (metaTxt.match(/\n\tversion="([^"]+)"/) || [null, "?"])[1];
+  const playthrough = (metaTxt.match(/\n\tplaythrough_id="([^"]+)"/) || [null, null])[1];
   const mp = metaTxt.includes("multiplayer=yes");
 
   // ---- players ---------------------------------------------------------
@@ -1516,7 +1517,7 @@ async function extract(save, sections, topAi = 0) {
     n_countries: live.length,
     world_pop: worldPop,
     world_locations: own.total(),
-    date, version, multiplayer: mp, you: youTag,
+    date, version, multiplayer: mp, you: youTag, playthrough,
     n_players: players.size, wars_live: nWars,
     save: save.name,
   };
@@ -1538,6 +1539,14 @@ self.onmessage = async (e) => {
   try {
     stage("Checking the save…");
     await checkPlaintext(save);
+    if (opts.peek) {
+      // Just the in-game date and campaign, to put several saves in order.
+      const head = await save.slice(0, 1 << 16).text();
+      const date = (head.match(/\n\tdate=([\d.]+)/) || [null, null])[1];
+      const playthrough = (head.match(/\n\tplaythrough_id="([^"]+)"/) || [null, null])[1];
+      postMessage({ type: "done", data: { peek: true, date, playthrough } });
+      return;
+    }
     log(`reading ${save.name} (${Math.round(save.size / 1e6)} MB)`);
     const sections = await scanSections(save);
     const missing = ["metadata", "countries"].filter((k) => !sections.has(k));

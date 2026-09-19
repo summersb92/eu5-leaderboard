@@ -121,7 +121,28 @@ td.l{text-align:left}
   margin-top:4px; margin-left:auto}
 .spark{display:block; margin-left:auto}
 .warnv{color:var(--alarm)}
-.delta{color:var(--verd); font-size:11.5px; margin-left:2px}
+.delta{color:var(--verd); font-size:11.5px; margin-left:2px; white-space:nowrap}
+.delta.up{color:var(--verd)} .delta.dn{color:var(--alarm)} .delta.same{color:var(--ink-3)}
+.delta.new{color:var(--accent); font-family:Archivo,sans-serif; font-weight:600; font-size:10.5px;
+  letter-spacing:.08em; text-transform:uppercase}
+.tlleg{display:flex; flex-wrap:wrap; gap:6px; margin:10px 4px 6px}
+.tlchip{display:inline-flex; align-items:center; gap:6px; font:600 12px/1 "IBM Plex Mono",Menlo,monospace;
+  color:var(--ink); background:var(--raised); border:1px solid var(--line); border-radius:4px; padding:5px 8px; cursor:pointer}
+.tlchip .sw{width:10px; height:10px; border-radius:2px; flex:none}
+.tlchip .tlname{font:500 12px/1 Archivo,sans-serif; color:var(--ink-3)}
+.tlchip[aria-pressed="false"]{opacity:.4; text-decoration:line-through}
+.tlchip:hover{border-color:var(--accent)}
+svg.tlchart.focus path,svg.tlchart.focus circle,svg.tlchart.focus text[data-id]{opacity:.15}
+svg.tlchart.focus .hi{opacity:1!important; stroke-width:3.2}
+.chghead{display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; margin:34px 0 12px}
+.chghead h3{font-family:Fraunces,Georgia,serif; font-weight:600; font-size:20px; margin:0}
+.chghead label{font-size:13px; color:var(--ink-2); display:flex; align-items:center; gap:6px}
+.sel{font:inherit; font-size:13px; color:var(--ink); background:var(--raised); border:1px solid var(--line);
+  border-radius:4px; padding:4px 6px}
+#chg td{vertical-align:top}
+.chgv{display:block}
+.chgd{display:block; min-height:1em}
+.chgd .delta{margin:0; font-size:11px}
 .zero{color:var(--ink-3)}
 tr.detail{display:none}
 tr.detail.open{display:table-row}
@@ -192,11 +213,27 @@ footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); colo
   <div class="sechead"><h2>The standings</h2><span class="rule"></span>
     <span class="eyebrow" style="margin:0">click a column to sort &middot; drag one to move it &middot; click a nation to open it</span>
     <button class="btn" id="colbtn" type="button">Columns</button>
+    <button class="btn" id="deltabtn" type="button" hidden>Show change</button>
     <button class="btn" id="copybtn" type="button">Copy for Discord</button></div>
   <div class="colpanel" id="colpanel" hidden></div>
   <div class="tablewrap"><table id="lb"><thead><tr id="hrow"></tr></thead><tbody id="tb"></tbody></table></div>
   <details class="copywrap"><summary>&#9656; Show the Discord text (follows the sort above)</summary>
     <textarea id="dtext" readonly spellcheck="false"></textarea></details>
+</section>
+
+<section id="tlsec" hidden>
+  <div class="sechead"><h2>Over time</h2><span class="rule"></span><span class="eyebrow" style="margin:0" id="tlrange"></span></div>
+  <p class="note" id="tlnote"></p>
+  <div class="sctabs" id="tltabs" role="group" aria-label="Figure to chart"></div>
+  <div class="chartbox" style="margin-top:12px"><svg class="scatter tlchart" id="tl" viewBox="0 0 780 420" role="img"></svg>
+    <div class="tlleg" id="tlleg"></div></div>
+  <div id="chgwrap" hidden>
+    <div class="chghead"><h3>What changed</h3>
+      <label>from <select class="sel" id="cmpfrom"></select></label>
+      <label>to <select class="sel" id="cmpto"></select></label>
+      <span class="eyebrow" style="margin:0">click a column to sort by its change</span></div>
+    <div class="tablewrap"><table id="chg"></table></div>
+  </div>
 </section>
 
 <section id="mapsec" hidden>
@@ -322,7 +359,7 @@ const SPEC={
   war_attrition:{fmt:r=>r.war_attrition?int(r.war_attrition):dash},
   gold:{fmt:r=>int(r.gold)}, dev:{fmt:r=>int(r.dev)},
   locations:{fmt:r=>r.locations}, provinces:{bar:false,fmt:r=>r.provinces},
-  subunits:{bar:false,fmt:r=>r.subunits}, advances:{bar:false,fmt:r=>r.advances+(r.advances_gained==null?"":' <span class="delta" title="since the game started">'+plus(r.advances_gained)+'</span>')},
+  subunits:{bar:false,fmt:r=>r.subunits}, advances:{bar:false,fmt:r=>r.advances+(r.advances_gained==null||showDelta?"":' <span class="delta" title="since the game started">'+plus(r.advances_gained)+'</span>')},
   advances_gained:{bar:false,fmt:r=>r.advances_gained==null?dash:plus(r.advances_gained)},
   wars:{bar:false,fmt:r=>r.wars}, rebels:{bar:false,fmt:r=>r.rebels},
   score_place:{bar:false,asc:true,fmt:r=>"#"+int(r.score_place)}
@@ -412,7 +449,7 @@ function detailPanel(r){
       +kv("ADM / DIP / MIL",f1(r.score.ADM)+" / "+f1(r.score.DIP)+" / "+f1(r.score.MIL))
       +kv("Prestige",f1(r.prestige))+kv("Stability",f1(r.stability))
       +kv("Government power",f1(r.govpower))+kv("Advances",r.advances+(r.advances_gained==null?"":" ("+plus(r.advances_gained)+" since start)")))
-  + '<div class="grp"><h4>Population, last '+r.pop_hist.length+' months</h4>'
+  + '<div class="grp"><h4>Population by year, '+(Math.floor(Number(String(W.date).split(".")[0]))-r.pop_hist.length+1)+' onwards</h4>'
       + '<div style="padding-top:4px">'+sparkline(r.pop_hist,150,40)+'</div>'
       + '<div class="kv"><span>'+pop(r.pop_hist[0])+'</span><b>&rarr;</b><span>'+pop(r.pop_hist[r.pop_hist.length-1])+'</span></div></div>'
   + grp("History", kv("Wars entered",r.wars)+kv("Rebellions",r.rebels)
@@ -423,6 +460,28 @@ function detailPanel(r){
   + '<div class="grp full"><h4>Monthly output by good &mdash; raw and worked, '+goods.length+' kinds</h4><div class="chips">'
       + goods.map(([g,v])=>'<span class="chip">'+esc(pretty(g))+'<b>'+f1(v)+'</b></span>').join("")+'</div></div>'
   + '</div></div>';
+}
+
+/* ---- saves over time: shared by the standings and "Over time" ---- */
+const dkey=d=>{const p=String(d).split(".").map(Number); return (p[0]||0)*10000+(p[1]||0)*100+(p[2]||0);};
+const TL=((D.timeline&&D.timeline.snapshots)||[]).slice().sort((a,b)=>dkey(a.date)-dkey(b.date));
+const MULTI=TL.length>=2;
+let cmpFrom=0, showDelta=false;          // snapshot the standings compare against
+const plain=s=>String(s).replace(/<[^>]*>/g,"").replace(/&mdash;|&ndash;/g,"-").replace(/&amp;/g,"&").trim();
+const snapRow=(i,id)=>{const s=TL[i]; return s?s.rows.find(x=>x.id===id):null;};
+/* higher is worse for these */
+const WORSE_UP=new Set(["gp_rank","debt","inflation","score_place","war_battle","war_attrition","expense","rebels"]);
+/* "+0.82 M" style change of field k between two rows, formatted like the column */
+function deltaHtml(k,now,was,withPct){
+  if(!was||!(k in was)) return "";
+  if(k==="gp_rank"&&(N(now[k])>900||N(was[k])>900)) return "";
+  const d=N(now[k])-N(was[k]);
+  if(!d) return N(now[k])?' <span class="delta same">&plusmn;0</span>':"";
+  const t=plain(colSpec(k).fmt({...now,[k]:Math.abs(d),advances_gained:null}));
+  if(!t||t==="-") return "";
+  const good=(d>0)!==WORSE_UP.has(k);
+  const pct=withPct&&N(was[k])&&k!=="gp_rank"?" ("+(d>0?"+":"-")+Math.abs(d/N(was[k])*100).toFixed(0)+"%)":"";
+  return ' <span class="delta '+(good?"up":"dn")+'">'+(d>0?"+":"-")+esc(t)+pct+'</span>';
 }
 
 function render(){
@@ -444,10 +503,13 @@ function render(){
         const fl=r.flag?'<img class="flag" src="'+esc(r.flag)+'" alt="'+esc(r.tag)+' coat of arms">'
                        :'<span class="flag ph"'+(r.color?' style="background:'+esc(r.color)+'"':'')+'></span>';
         td.innerHTML='<div class="nat">'+fl+'<span class="tag">'+esc(r.tag)+'</span>'
-          +'<span><span class="natname">'+esc(r.name)+'</span><br><span class="player">'+who+'</span></span></div>';
+          +'<span><span class="natname">'+esc(r.name)+'</span>'
+          +(showDelta&&MULTI&&!snapRow(cmpFrom,r.id)?' <span class="delta new">new since '+esc(TL[cmpFrom].date)+'</span>':'')
+          +'<br><span class="player">'+who+'</span></span></div>';
       } else if(c.spark){ td.innerHTML=sparkline(r.pop_hist);
       } else {
         let h=c.fmt(r);
+        if(showDelta&&MULTI) h+=deltaHtml(c.k,r,snapRow(cmpFrom,r.id));
         if(c.bar && N(r[c.k])>0){const m=max(c.k); const w=m?Math.max(2,N(r[c.k])/m*100):0;
           h+='<span class="bar" style="width:'+w.toFixed(1)+'%"></span>';}
         td.innerHTML=h;
@@ -548,6 +610,178 @@ render();
   });
   draw();
 })();
+
+/* ---- over time: a chart per figure, and what changed between saves ---- */
+(function(){
+  const yearOf=d=>{const p=String(d).split(".").map(Number); return (p[0]||0)+((p[1]||1)-1)/12+((p[2]||1)-1)/365;};
+  const latestYear=yearOf(W.date);
+  const M=[
+    {k:"pop",t:"Population",hist:"pop_hist",fmt:v=>!v?"0":v>=1000?+(v/1000).toFixed(2)+" M":Math.round(v)+" K"},
+    {k:"taxbase",t:"Tax base",hist:"tax_hist"},
+    {k:"econbase",t:"Econ base",hist:"econ_hist"},
+    {k:"income",t:"Income"},{k:"locations",t:"Locations"},{k:"dev",t:"Development"},
+    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"advances",t:"Advances"},{k:"gold",t:"Gold"},
+    {k:"prestige",t:"Prestige"},{k:"gp_rank",t:"Great-power rank",invert:true}
+  ];
+  const num=v=>{const a=Math.abs(v); return a>=1000?int(v):a>=100?String(Math.round(v)):a>=10?String(+v.toFixed(1)):String(+v.toFixed(2));};
+  /* [[year, value, fromSave, date]] - yearly history where the save keeps
+     one, plus the value at each save's date */
+  function series(r,m){
+    const pts=new Map();
+    if(m.hist){
+      const h=r[m.hist]||[], y0=Math.floor(latestYear);
+      h.forEach((v,i)=>{const y=y0-(h.length-1-i); pts.set(y,[y,N(v),false,String(y)]);});
+    }
+    const snaps=TL.length?TL:[{date:W.date,rows:R}];
+    snaps.forEach(s=>{
+      const x=s.rows.find(q=>q.id===r.id);
+      if(!x||!(m.k in x)) return;
+      if(m.k==="gp_rank"&&N(x[m.k])>900) return;
+      const y=yearOf(s.date); pts.set(y,[y,N(x[m.k]),true,s.date]);
+    });
+    return [...pts.values()].sort((a,b)=>a[0]-b[0]);
+  }
+  const avail=M.filter(m=>R.some(r=>series(r,m).length>=2));
+  if(!avail.length) return;
+  $("tlsec").hidden=false;
+  const first=MULTI?TL[0].date:null;
+  $("tlrange").textContent=MULTI?TL.length+" saves, "+TL[0].date+" to "+TL[TL.length-1].date:"one save";
+  $("tlnote").innerHTML=MULTI
+    ?'Each line is a nation, followed through any change of tag. Dots mark the saves; population, tax base and econ base also have the game&rsquo;s own yearly record in between. Click a nation below the chart to hide or show it.'
+    :'Population, tax base and econ base, year by year from the game&rsquo;s own record. Add an earlier or later save of this campaign to chart everything else and see what changed between them.';
+
+  const svg=$("tl"), W0=780,H0=420,L=64,Rr=84,T=30,B=40;
+  const niceStep=m=>{const raw=m/5, mag=Math.pow(10,Math.floor(Math.log10(raw))), n=raw/mag;
+    return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*mag;};
+  const KEY="eu5timeline";
+  let mode=avail[0];
+  try{ const v=localStorage.getItem(KEY); mode=avail.find(m=>m.k===v)||mode; }catch(e){}
+  const hidden=new Set();
+
+  function draw(){
+    const fmt=mode.fmt||num;
+    const all=R.filter(r=>!hidden.has(r.id)).map(r=>({r,pts:series(r,mode)})).filter(s=>s.pts.length);
+    const xs=[...all.flatMap(s=>s.pts.map(p=>p[0])),...(MULTI?TL.map(s=>yearOf(s.date)):[])];
+    const ys=all.flatMap(s=>s.pts.map(p=>p[1]));
+    let g="";
+    if(!ys.length){ svg.innerHTML='<text x="'+W0/2+'" y="'+H0/2+'" text-anchor="middle" fill="var(--ink-3)" font-size="13">Every nation is hidden &mdash; click one below.</text>'; return; }
+    let x0=Math.min(...xs), x1=Math.max(...xs);
+    if(x1-x0<1){ x0-=0.5; x1+=0.5; }
+    let lo=mode.invert?1:Math.min(0,...ys), hi=Math.max(...ys);
+    const ys_=niceStep(Math.max(1e-9,hi-lo));
+    hi=Math.ceil(hi/ys_)*ys_||ys_; if(mode.invert) hi=Math.max(hi,2);
+    const px=v=>L+(v-x0)/(x1-x0)*(W0-L-Rr);
+    const py=v=>mode.invert?T+(v-lo)/(hi-lo)*(H0-T-B):H0-B-(v-lo)/(hi-lo)*(H0-T-B);
+    const tx=(x,y,a,t,extra)=>'<text x="'+x+'" y="'+y+'" text-anchor="'+a+'" font-size="11" font-family="IBM Plex Mono,monospace" fill="var(--ink-3)"'+(extra||"")+'>'+t+'</text>';
+    for(let v=Math.ceil(lo/ys_)*ys_; v<=hi+ys_/1e6; v+=ys_){
+      if(mode.invert&&v<1) continue;
+      g+='<line x1="'+L+'" y1="'+py(v)+'" x2="'+(W0-Rr)+'" y2="'+py(v)+'" stroke="var(--line-soft)" stroke-width="1"/>'+tx(L-10,py(v)+4,"end",mode.invert?"#"+Math.round(v):fmt(v));
+    }
+    const span=x1-x0, xstep=span<=4?1:span<=10?2:span<=25?5:span<=60?10:25;
+    for(let y=Math.ceil(x0/xstep)*xstep; y<=x1; y+=xstep) g+=tx(px(y),H0-B+20,"middle",y);
+    g+='<line x1="'+L+'" y1="'+(H0-B)+'" x2="'+(W0-Rr)+'" y2="'+(H0-B)+'" stroke="var(--line)" stroke-width="1"/>';
+    if(MULTI) TL.forEach(s=>{
+      const x=px(yearOf(s.date)).toFixed(1);
+      g+='<line x1="'+x+'" y1="'+(T-6)+'" x2="'+x+'" y2="'+(H0-B)+'" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 4" opacity=".5"/>'
+        +tx(x,T-12,"middle",esc(s.date));
+    });
+    g+='<text x="'+(L-56)+'" y="14" font-size="11" font-family="Archivo,sans-serif" font-weight="600" fill="var(--ink-3)" letter-spacing="1.4">'+esc(mode.t.toUpperCase())+(mode.invert?" (1 = TOP)":"")+'</text>';
+    const ends=[];
+    all.forEach(({r,pts})=>{
+      const col=r.color?esc(r.color):"var(--verd)";
+      const d=pts.map((p,i)=>(i?"L":"M")+px(p[0]).toFixed(1)+" "+py(p[1]).toFixed(1)).join(" ");
+      g+='<path data-id="'+esc(r.id)+'" d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/>';
+      pts.filter(p=>p[2]).forEach(p=>{
+        g+='<circle data-id="'+esc(r.id)+'" cx="'+px(p[0]).toFixed(1)+'" cy="'+py(p[1]).toFixed(1)+'" r="4" fill="'+col+'" stroke="var(--surface)" stroke-width="1.5"><title>'
+          +esc(r.name)+' &middot; '+esc(p[3])+': '+esc(mode.invert?"#"+p[1]:fmt(p[1]))+'</title></circle>';
+      });
+      const last=pts[pts.length-1];
+      ends.push({id:r.id,tag:r.tag,x:px(last[0]),y:py(last[1]),col});
+    });
+    // end labels, nudged apart so they don't overlap
+    ends.sort((a,b)=>a.y-b.y);
+    for(let i=1;i<ends.length;i++) if(ends[i].y-ends[i-1].y<12) ends[i].y=ends[i-1].y+12;
+    const over=ends.length?ends[ends.length-1].y-(H0-B+4):0;
+    if(over>0) ends.forEach(e=>{e.y-=over;});
+    ends.forEach(e=>{
+      g+='<text data-id="'+esc(e.id)+'" x="'+(e.x+8).toFixed(1)+'" y="'+(e.y+4).toFixed(1)+'" font-size="12" font-family="IBM Plex Mono,monospace" font-weight="600" fill="var(--ink-2)">'+esc(e.tag)+'</text>';
+    });
+    svg.innerHTML=g;
+    svg.setAttribute("aria-label",mode.t+" over time, by nation");
+    $("tltabs").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.k===mode.k)));
+  }
+  avail.forEach(m=>{
+    const b=el("button","btn",esc(m.t)); b.type="button"; b.dataset.k=m.k;
+    b.onclick=()=>{ mode=m; try{ localStorage.setItem(KEY,m.k); }catch(e){} draw(); };
+    $("tltabs").appendChild(b);
+  });
+  // legend: click to hide/show a nation, hover to pick its line out
+  R.forEach(r=>{
+    const b=el("button","tlchip",'<span class="sw" style="background:'+(r.color?esc(r.color):"var(--verd)")+'"></span>'+esc(r.tag)+' <span class="tlname">'+esc(r.name)+'</span>');
+    b.type="button"; b.setAttribute("aria-pressed","true");
+    b.onclick=()=>{ hidden.has(r.id)?hidden.delete(r.id):hidden.add(r.id);
+      b.setAttribute("aria-pressed",String(!hidden.has(r.id))); draw(); };
+    b.onmouseenter=()=>{ svg.classList.add("focus");
+      svg.querySelectorAll('[data-id="'+CSS.escape(r.id)+'"]').forEach(n=>n.classList.add("hi")); };
+    b.onmouseleave=()=>{ svg.classList.remove("focus"); svg.querySelectorAll(".hi").forEach(n=>n.classList.remove("hi")); };
+    $("tlleg").appendChild(b);
+  });
+  draw();
+
+  // ---- what changed between two saves ----
+  if(!MULTI) return;
+  $("chgwrap").hidden=false;
+  const from=$("cmpfrom"), to=$("cmpto");
+  TL.forEach((s,i)=>{
+    from.appendChild(new Option(s.date,i)); to.appendChild(new Option(s.date,i));
+  });
+  from.value=0; to.value=TL.length-1;
+  const CH=["pop","taxbase","econbase","income","locations","dev","army","advances","gold","gp_rank"];
+  let key="pop", asc=false;
+  const flagOf=id=>{const r=R.find(x=>x.id===id); return r&&r.flag?r.flag:null;};
+  function drawChg(){
+    const fi=+from.value, ti=+to.value, a=TL[fi], b=TL[ti];
+    const rows=b.rows.map(r=>({r,was:a.rows.find(x=>x.id===r.id)}));
+    const dv=(o,k)=>o.was?N(o.r[k])-N(o.was[k]):-Infinity;
+    rows.sort((p,q)=>{
+      if(key==="tag") return (asc?1:-1)*String(p.r.name).localeCompare(String(q.r.name));
+      const c=(dv(p,key)-dv(q,key))*(WORSE_UP.has(key)?-1:1);
+      return asc?c:-c;
+    });
+    let h='<thead><tr>'+['tag',...CH].map(k=>'<th'+(k==="tag"?' class="l"':'')+' tabindex="0" data-k="'+k+'"'
+      +(k===key?' aria-sort="'+(asc?"ascending":"descending")+'"':'')+'>'+(k==="tag"?"Nation":esc(FIELDS[k]||k))
+      +'<span class="car">'+(k===key?(asc?"&#9650;":"&#9660;"):"&#9660;")+'</span></th>').join("")+'</tr></thead><tbody>';
+    rows.forEach(({r,was})=>{
+      const fl=flagOf(r.id), sw=fl?'<img class="flag" src="'+esc(fl)+'" alt="">':'<span class="flag ph"'+(r.color?' style="background:'+esc(r.color)+'"':'')+'></span>';
+      const renamed=was&&was.tag!==r.tag?' <span class="player">was '+esc(was.tag)+'</span>':'';
+      h+='<tr class="row" style="cursor:default"><td class="l"><div class="nat">'+sw+'<span class="tag">'+esc(r.tag)+'</span><span class="natname">'+esc(r.name)+renamed+(was?'':' <span class="delta new">new</span>')+'</span></div></td>';
+      CH.forEach(k=>{
+        h+='<td class="num"><span class="chgv">'+(k==="advances"?int(r.advances):colSpec(k).fmt(r))+'</span><span class="chgd">'+(was?deltaHtml(k,r,was,true):'')+'</span></td>';
+      });
+      h+='</tr>';
+    });
+    const t=$("chg"); t.innerHTML=h+'</tbody>';
+    t.querySelectorAll("thead th").forEach(th=>{
+      const go=()=>{const k=th.dataset.k; if(k===key) asc=!asc; else {key=k; asc=(k==="tag");} drawChg();};
+      th.onclick=go; th.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
+    });
+  }
+  from.onchange=()=>{ cmpFrom=+from.value; syncDeltaBtn(); drawChg(); if(showDelta) render(); };
+  to.onchange=drawChg;
+  drawChg();
+})();
+
+/* standings: show each figure's change since an earlier save */
+function syncDeltaBtn(){
+  const b=$("deltabtn");
+  if(!MULTI){ b.hidden=true; return; }
+  b.hidden=false;
+  b.textContent=showDelta?"Hide change":"Show change since "+TL[cmpFrom].date;
+  b.classList.toggle("ok",showDelta);
+  b.setAttribute("aria-pressed",String(showDelta));
+}
+$("deltabtn").onclick=()=>{ showDelta=!showDelta; syncDeltaBtn(); render(); };
+syncDeltaBtn();
 
 /* ---- column picker: show, hide and reorder; saved in this browser ---- */
 function setChosen(next){

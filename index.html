@@ -26,14 +26,16 @@
       <div class="step" id="step-save">
         <div class="stephead"><span class="stepno">1</span><h2>Your save</h2></div>
         <label class="drop" id="drop" tabindex="0">
-          <input type="file" id="saveinput" accept=".eu5,.json" hidden>
+          <input type="file" id="saveinput" accept=".eu5,.json" multiple hidden>
           <span class="dropmain">Drop a <code>.eu5</code> save here, or <u>choose one</u></span>
+          <span class="dropsub">Several saves from one campaign make a timeline of how everyone has grown.</span>
           <span class="dropsub">It has to be written in debug mode &mdash; <a href="#readable">how</a>.
             Usually in <code class="path">Documents\Paradox Interactive\Europa Universalis V\save games</code></span>
         </label>
         <div class="recent" id="recent" hidden>
           <div class="recenthead"><span>Recent saves</span><button class="linkbtn" id="recentclear" type="button">Clear</button></div>
           <ul class="recentlist" id="recentlist"></ul>
+          <button class="btn recentcompare" id="recentcompare" type="button" hidden disabled>Tick two or more to compare</button>
         </div>
       </div>
 
@@ -90,6 +92,7 @@
     <div class="toolbar">
       <span class="savename mono" id="savename"></span>
       <span class="spacer"></span>
+      <button class="btn primary" id="addsave" type="button" hidden>Add a save to compare</button>
       <button class="btn" id="rebuild" type="button" hidden>Rebuild</button>
       <button class="btn" id="dlhtml" type="button">Download report</button>
       <button class="btn" id="dljson" type="button">Download data</button>
@@ -133,6 +136,14 @@
           keeps a private reference to each file, in this browser only &mdash; never the file itself or its
           contents, and never on a server. It will ask permission again on a new visit, and a save that has been
           overwritten (an autosave, say) opens in its latest state. Use &times; or <em>Clear</em> to forget them.</p></details>
+      <details><summary>How do I compare saves over time?</summary>
+        <p>Give the page two or more debug-mode saves from the same campaign: pick or drop them together, tick
+          them in <em>Recent saves</em> and press <em>Compare</em>, or build one report and use <em>Add a save to
+          compare</em>. The newest save becomes the report; the others add an <em>Over time</em> section with a
+          chart per figure and a table of changes, and the standings can show each figure's change. Nations are
+          followed through tag changes (Castile becoming Spain, say). Even a single save charts population, tax
+          base and economic base year by year, because the game keeps that history. <em>Download data</em> keeps
+          every save's numbers, so next time you can drop that file plus your newest save.</p></details>
       <details><summary>What can I do with the report?</summary>
         <p><em>Download report</em> saves one self-contained HTML file you can send to anyone &mdash; it opens
           in any browser with nothing to install. <em>Download data</em> saves the extracted numbers as JSON;
