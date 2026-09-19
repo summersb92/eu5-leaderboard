@@ -107,9 +107,10 @@
     <p class="notice" id="notice" hidden></p>
     <div class="sharepanel" id="sharepanel" hidden>
       <div class="sharehead"><h3>Share this dashboard</h3>
-        <span class="sharenote">Anyone with the link sees this report, without the upload controls. No account needed to view it.</span></div>
-      <p class="shareexisting" id="shareexisting" hidden>This campaign already has a link &mdash; <a href="#" target="_blank" rel="noopener">open it</a>.
-        Updating it puts this report behind the same link.</p>
+        <span class="sharenote">Anyone with the link sees this report, without the upload controls. No account needed to view it.</span>
+        <span class="sharekey mono" id="sharekey" title="Worked out from the saves themselves: the same saves always get the same key, and the same link"></span></div>
+      <p class="shareexisting" id="shareexisting" hidden>These saves already have a link &mdash; <a href="#" target="_blank" rel="noopener">open it</a>.
+        Sharing them again gives the same link.</p>
       <div id="sharesetup" hidden>
         <p class="sharestep">Links are stored as a secret gist on your GitHub account (unlisted: only people with the link can find it). One-time setup:</p>
         <ol class="sharehow">
@@ -125,7 +126,7 @@
       </div>
       <div class="sharebtns" id="sharebtns" hidden>
         <button class="btn primary" id="sharego" type="button">Create the link</button>
-        <button class="btn quiet" id="sharenew" type="button" hidden>Make a separate new link</button>
+        <button class="btn quiet" id="sharenew" type="button" hidden>Replace my earlier link</button>
       </div>
       <p class="sharebusy" id="sharebusy" hidden><span class="spinner" aria-hidden="true"></span> Uploading the report to your gist&hellip;</p>
       <div id="sharedone" hidden>

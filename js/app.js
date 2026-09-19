@@ -908,50 +908,108 @@ function shareError(msg) {
   e.textContent = msg;
 }
 
+/* A report's key: a hash of what its saves contain - each save's campaign
+   and date, and every player nation's id, population, tax base and
+   locations. The same saves give the same key however they were loaded
+   (save file, data file, another computer), so they get the same link.
+   Build options (AI nations, map, flags) don't change it. */
+async function reportKey(data) {
+  const snaps = data.timeline && data.timeline.snapshots && data.timeline.snapshots.length
+    ? data.timeline.snapshots : [{ date: data.world.date, playthrough: data.world.playthrough, rows: data.rows }];
+  const n = (v) => Math.round((Number(v) || 0) * 1000);
+  const canon = snaps.map((s) => [s.playthrough || "", String(s.date),
+    s.rows.filter((r) => r.is_player).map((r) => [String(r.id), n(r.pop), n(r.taxbase), Math.round(Number(r.locations) || 0)])
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))])
+    .sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(canon)));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+const KEYLINKS_KEY = "eu5linkkeys";
+const shortKey = (k) => String(k || "").slice(0, 16);
+function keyLinks() {
+  try { return JSON.parse(lsGet(KEYLINKS_KEY) || "{}") || {}; } catch (e) { return {}; }
+}
+const keyTag = (k) => "[key:" + shortKey(k) + "]";
+
+/* Look through the sharer's own gists for one already holding this key -
+   finds links made from another browser or computer. */
+async function findGistByKey(key) {
+  const tag = keyTag(key);
+  for (let page = 1; page <= 5; page++) {
+    const list = await gistApi("GET", `/gists?per_page=100&page=${page}`);
+    const hit = list.find((g) => (g.description || "").includes(tag) && g.files && g.files[GIST_FILE]);
+    if (hit) return hit;
+    if (list.length < 100) break;
+  }
+  return null;
+}
+
 function openShare() {
   const panel = $("sharepanel");
   panel.hidden = !panel.hidden;
   if (panel.hidden) return;
-  const link = savedLinks()[campaignKey()];
-  $("shareexisting").hidden = !link;
-  if (link) $("shareexisting").querySelector("a").href = link.url;
+  const known = keyLinks()[current.key], camp = savedLinks()[campaignKey()];
+  $("sharekey").textContent = "Report key " + shortKey(current.key);
+  $("shareexisting").hidden = !known;
+  if (known) $("shareexisting").querySelector("a").href = known.url;
   $("shareforget").hidden = !shareToken();
   setShareState(shareToken() ? null : "sharesetup");
-  $("sharego").textContent = link ? "Update the link" : "Create the link";
-  $("sharenew").hidden = !link;
-  $("sharego").hidden = false;
+  $("sharego").textContent = known ? "Get the link" : "Create the link";
+  // offer to move the campaign's earlier link onto these saves instead -
+  // unless these saves already have a link of their own
+  const other = camp && camp.key !== current.key && !known;
+  $("sharenew").hidden = !other;
+  if (other) $("sharenew").textContent = "Replace my " + camp.date + " link with this report instead";
   $("sharebtns").hidden = !shareToken();
 }
 
-async function publishShare(fresh) {
+async function publishShare(replace) {
   if (!current) return;
   if (!shareToken()) { setShareState("sharesetup"); return; }
   setShareState("sharebusy");
-  const links = savedLinks(), key = campaignKey(), prev = fresh ? null : links[key];
+  const key = current.key, links = savedLinks(), kl = keyLinks(), camp = campaignKey();
   const w = current.data.world;
   const body = {
-    description: `EU5 standings ${w.date} (${current.data.rows.length} nations) - EU5 Leaderboard`,
-    files: { [GIST_FILE]: { content: JSON.stringify(sharePayload()) } },
+    description: `EU5 standings ${w.date} (${current.data.rows.length} nations) - EU5 Leaderboard ${keyTag(key)}`,
+    files: { [GIST_FILE]: { content: JSON.stringify({ ...sharePayload(), key }) } },
+  };
+  const patch = async (id) => {
+    try { return await gistApi("PATCH", "/gists/" + id, body); } catch (e) { if (e.status === 404) return null; throw e; }
   };
   try {
-    let gist;
-    if (prev) {
-      try {
-        gist = await gistApi("PATCH", "/gists/" + prev.id, body);
-      } catch (e) {
-        if (e.status !== 404) throw e;
-        gist = null; // deleted since: make a new one
-      }
+    let gist = null, how;
+    if (replace && links[camp]) {
+      gist = await patch(links[camp].id);
+      how = "replaced";
     }
-    if (!gist) gist = await gistApi("POST", "/gists", { ...body, public: false });
+    if (!gist) {
+      // same saves as before? reuse that link (refreshing its contents)
+      const known = kl[key];
+      if (known) gist = await patch(known.id);
+      if (!gist) {
+        const found = await findGistByKey(key);
+        if (found) gist = await patch(found.id);
+      }
+      if (gist) how = "reused";
+    }
+    if (!gist) {
+      gist = await gistApi("POST", "/gists", { ...body, public: false });
+      how = "new";
+    }
     const url = viewUrl(gist.id, gist.owner && gist.owner.login);
-    links[key] = { id: gist.id, url, date: w.date };
+    // one gist per key: drop any other key that pointed at this gist
+    for (const k of Object.keys(kl)) if (kl[k].id === gist.id && k !== key) delete kl[k];
+    kl[key] = { id: gist.id, url, date: w.date };
+    links[camp] = { id: gist.id, url, date: w.date, key };
+    lsSet(KEYLINKS_KEY, JSON.stringify(kl));
     lsSet(LINKS_KEY, JSON.stringify(links));
     $("shareurl").value = url;
     $("shareopen").href = url;
-    $("sharewhat").textContent = prev && gist.id === prev.id
-      ? `Updated to ${w.date}. It's the same link as before, so anyone who has it now sees this report.`
-      : `New link for this campaign. Next time you share it, the same link is updated.`;
+    $("sharewhat").textContent = {
+      reused: "These saves already had a link, so here it is again (refreshed with this build). Same saves, same link.",
+      replaced: `Your earlier link now shows this report (${w.date}), so anyone who has it sees the update.`,
+      new: "New link for these saves. Sharing the same saves again, from any computer, gives this same link.",
+    }[how];
     setShareState("sharedone");
     $("sharebtns").hidden = true;
   } catch (e) {
@@ -1039,7 +1097,7 @@ async function showReport(raw, sourceName, notes, extra) {
   const html = buildHtml(await loadTemplate(), data, extra);
   const base = (data.world.save || sourceName).replace(/\.(eu5|json)$/i, "")
     .replace(/ standings$/i, "").replace(/[\\/:*?"<>|]+/g, "_");
-  current = { data, html, base };
+  current = { data, html, base, key: await reportKey(data) };
   $("sharepanel").hidden = true;
   $("result").hidden = false;
   $("savename").textContent = sourceName;

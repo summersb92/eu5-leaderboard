@@ -52,8 +52,12 @@ filter.
 secret gist on the sharer's GitHub account, via a token with only the `gist`
 scope, and gives a link like `…/eu5-leaderboard/?view=<gist id>&u=<owner>`.
 That opens the page in viewer mode: the report only, no upload controls.
-Sharing the same campaign again updates the same gist, so the link stays
-the same. Viewers read the gist through the GitHub API (60 requests an hour
+Each report has a key: a SHA-256 of what its saves contain (each save's
+campaign and date, and every player nation's id, population, tax base and
+locations), stored in the gist's description. Sharing the same saves again -
+in any order, from save files or a data file, on any computer - finds that
+gist and reuses its link instead of making another. Different saves get a
+new link, with an option to put them behind the campaign's earlier link. Viewers read the gist through the GitHub API (60 requests an hour
 per viewer) and fall back to the raw gist file.
 
 ## Military estimates
