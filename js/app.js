@@ -594,6 +594,7 @@ function runWorker(save, opts, onStage, onProgress) {
       const m = e.data;
       if (m.type === "log") logLine(m.msg);
       else if (m.type === "stage") { stage = m.msg; onStage && onStage(m.msg); }
+      else if (m.type === "fs") w.postMessage({ type: "fs", id: m.id, result: gameLookup(m.op, m.rel) });
       else if (m.type === "progress") onProgress && onProgress(m.value);
       else if (m.type === "done") { end(); resolve(m.data); }
       else if (m.type === "error") { end(); reject(new BuildError(save.name + ": " + m.message, m.code)); }
@@ -610,8 +611,32 @@ function runWorker(save, opts, onStage, onProgress) {
       logLine("! " + err.message);
       reject(err);
     };
-    w.postMessage({ save, game, opts });
+    w.onmessageerror = () => {
+      end();
+      const err = new BuildError(`${save.name}: the browser couldn't pass data to the background worker.`);
+      err.crash = true;
+      reject(err);
+    };
+    // Only the folder's name goes over; the worker asks for files one by one.
+    w.postMessage({ save, game: game ? { label: game.label } : null, opts });
   });
+}
+
+/* Answer a worker's request for a game file ("file") or folder listing
+   ("list"), from the linked folder. */
+function gameLookup(op, rel) {
+  if (!game) return null;
+  if (op === "file") return game.files.get(rel) || null;
+  const pre = rel.replace(/\/?$/, "/");
+  let found = false;
+  const out = [];
+  for (const k of game.files.keys()) {
+    if (!k.startsWith(pre)) continue;
+    found = true;
+    const rest = k.slice(pre.length);
+    if (!rest.includes("/")) out.push(rest);
+  }
+  return found ? out : null;
 }
 
 // "1368.1.21" -> comparable number

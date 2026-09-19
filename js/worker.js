@@ -239,16 +239,33 @@ function num(x, dflt = 0.0) {
 }
 
 // ==========================================================================
-// Game files: a {relative path -> File} map from a folder <input>, with
-// paths relative to the install's `game` folder.
+// Game files: they stay on the page, which answers one request at a time.
+// (Handing the worker thousands of file references in a single message can
+// make the browser drop the worker.) Paths are relative to the install's
+// `game` folder.
 // ==========================================================================
+let fsSeq = 0;
+const fsWaiting = new Map();
+function fsCall(op, rel) {
+  return new Promise((resolve) => {
+    const id = ++fsSeq;
+    fsWaiting.set(id, resolve);
+    postMessage({ type: "fs", id, op, rel });
+  });
+}
+function fsReply(msg) {
+  const done = fsWaiting.get(msg.id);
+  fsWaiting.delete(msg.id);
+  if (done) done(msg.result);
+}
+
 class GameFS {
   constructor(src) {
-    this.files = src.files;
     this.label = src.label || "your EU5 install";
   }
-  async file(rel) {
-    return this.files.get(rel) || null;
+  /* File, or null if missing */
+  file(rel) {
+    return fsCall("file", rel);
   }
   async text(rel) {
     const f = await this.file(rel);
@@ -257,17 +274,8 @@ class GameFS {
     return t.charCodeAt(0) === 0xfeff ? t.slice(1) : t;
   }
   /* file names (not subfolders) directly inside rel, or null if missing */
-  async list(rel) {
-    const pre = rel.replace(/\/?$/, "/");
-    let found = false;
-    const out = [];
-    for (const k of this.files.keys()) {
-      if (!k.startsWith(pre)) continue;
-      found = true;
-      const rest = k.slice(pre.length);
-      if (!rest.includes("/")) out.push(rest);
-    }
-    return found ? out : null;
+  list(rel) {
+    return fsCall("list", rel);
   }
 }
 const pySort = (arr) => arr.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
@@ -1539,6 +1547,7 @@ self.addEventListener("unhandledrejection", (e) =>
   log("worker error: " + ((e.reason && e.reason.stack) || e.reason)));
 
 self.onmessage = async (e) => {
+  if (e.data && e.data.type === "fs") return fsReply(e.data);
   const { save, game, opts } = e.data;
   const t0 = performance.now();
   try {
