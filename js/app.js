@@ -19,6 +19,7 @@ const FIELDS = {
   creditworthiness: "Creditworthiness", inflation: "Inflation",
   army: "Army", levies: "Levies", regulars: "Regulars", mercs: "Mercs",
   merc_companies: "Merc. companies", army_morale: "Army morale", army_exp: "Army exp.",
+  levies_potential: "Potential levies", discipline_est: "Discipline (est.)", levy_combat_est: "Levy combat (est.)",
   subunits: "Regiments", manpower: "Manpower",
   max_manpower: "Manpower pool", army_tradition: "Army trad.", army_upkeep: "Army upkeep",
   navy: "Ships", navy_levies: "Levy ships", navy_regulars: "Regular ships", navy_mercs: "Merc. ships",
@@ -86,6 +87,7 @@ function sanitizeData(d) {
       else if (k === "is_player") o[k] = v === true;
       else if (k === "flag") { if (isPng(v)) o[k] = v; }
       else if (k === "color") o[k] = typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v) ? v : null;
+      else if (k === "mil_sources") o[k] = Array.isArray(v) ? v.filter(Array.isArray).map((s) => [str(s[0]), numOr0(s[1]), numOr0(s[2])]) : [];
       else if (["goods", "raw", "ranks", "score"].includes(k)) o[k] = numMap(v);
       else if (k.endsWith("_hist")) o[k] = numList(v);
       else o[k] = numOr0(v);

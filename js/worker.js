@@ -91,6 +91,83 @@ async function loadStartingAdvances(fs) {
   return Object.keys(out).length ? out : null;
 }
 
+// Discipline and levy combat ability aren't in the save - the game derives
+// them from modifiers at run time. The estimate adds up the bonuses from
+// sources the save does record, using this table of what each source gives
+// (d = discipline, l = levy combat ability, as fractions). Built from the
+// 1.3.11 game files by tools/extract_military_modifiers.py.
+const MIL_SOURCES = {"advance":{"appointed_chain_of_command":{"l":0.1},"regular_levy_training":{"l":0.1},"discipline_drills":{"d":0.05},"seljuk_roots":{"d":0.05},"bul_the_standing_drilled_infantry":{"d":0.05},"reform_the_feudal_army":{"d":0.05},"french_ambition":{"d":0.05},"military_border":{"d":0.03},"drafted_hatun_runas":{"l":0.1},"ira_the_qurchi":{"d":0.05},"a_neverending_crusade":{"d":0.05},"mandinka_warrior_spirit":{"d":0.05},"nav_basque_ferocity":{"d":0.025},"rom_restore_the_legions":{"d":0.025},"hum_the_kosaca_iron_fist":{"d":0.05},"modernization_of_the_military":{"d":0.05},"swedish_steel":{"d":0.05},"teu_crusader_discipline":{"d":0.05},"conquerors_legacy":{"d":0.05},"turkic_traditions":{"d":0.05},"svn_the_slavonian_grenadier_regiments":{"d":0.05},"royal_mamluks":{"d":0.05},"ori_odia_militarization":{"d":0.05},"auftragstaktik":{"d":0.05},"sia_thai_unity":{"d":0.05},"zmw_discipline_and_traning":{"d":0.05},"thp_a_centralized_levy_system":{"l":0.1},"ant_the_eternal_resistance":{"d":0.05},"dal_the_soldato_dalmantine":{"d":0.05},"pcz_piacentine_soldiery":{"d":0.05},"mod_accademia_militare":{"d":0.05},"feo_the_gothic_red_guard_advance":{"d":0.05},"aqu_friulian_soldiery":{"d":0.05},"wallachian_heritage":{"d":0.05},"warriors_unity":{"d":0.05},"jap_bushido":{"d":0.05},"pea_the_griffin_companies":{"d":0.05},"pie_ordinanza_piedmontese":{"d":0.05},"pun_reforming_the_punjabi_army":{"d":0.05},"raj_mandatory_firearm_drilling":{"d":0.05},"rav_battle_of_ravenna":{"d":0.05},"cli_the_windic_march_arsenal":{"d":0.05},"pis_natural_philosophy":{"d":0.05},"cossack_administration":{"d":0.05},"lat_the_new_praetorian_guard_advance":{"d":0.05},"smz_tsurinobuse":{"d":0.05}},"policy":{"peasant_levies":[{"l":-0.1}],"longbow_competitions":[{"l":0.1}],"landholders":[{"l":0.05}],"citizenry":[{"l":0.05}],"military_rulership_policy":[{"l":0.2}],"black_army_policy":[{"d":0.025}],"elite_training_policy":[{"d":0.05}],"byz_tagmata_policy_upgraded":[{"d":0.025}],"al_mamalik_al_sultaniyya":[{"d":0.025}],"sump_law_warrior_culture":[{"d":0.05}],"apc_senapati_focus_policy":[{"d":0.05}],"miri_piri":[{"d":0.025}]},"privilege":{"clergy_military_orders":[{"d":0.025,"not_reform":"military_order_reform"},{"d":0.05,"reform":"military_order_reform"}],"auxilium_et_consilium":[{"l":0.1}],"primacy_of_nobility":[{"d":0.05}],"rajput_society":[{"d":0.05}],"peasants_allowed_weapons_privilege":[{"l":0.1}],"land_owning_farmers":[{"l":0.05}]},"reform":{"weapons_quality_standards":[{"d":0.05}],"magna_carta_reform":[{"l":0.1}],"modern_imperial_army":[{"d":0.05}],"diwan_i_bandagan":[{"d":0.025}],"noble_elite":[{"l":0.05}],"military_order_reform":[{"l":0.1}]},"societal":{"aristocracy_vs_plutocracy":{"left":{"d":0.1}},"serfdom_vs_free_subjects":{"right":{"l":0.1}}},"modifier":{"bad_discipline":{"d":-0.05},"nap_struggle_for_independence":{"d":0.1},"the_rule_of_god":{"d":0.05},"the_dying_of_the_light":{"d":-0.05},"good_discipline":{"d":0.025},"foreign_veterans":{"d":-0.015},"fra_compagnie_d_ordonnance":{"d":0.05},"fra_belligerent_policy":{"d":0.005},"indochina_french_advisors":{"d":0.05},"sbl_english_backing":{"l":0.1},"sco_desertion_among_balliol":{"d":-0.1},"sco_advance_into_england":{"d":0.05},"sco_army_focus":{"d":0.05},"plc_school_of_chivalry_burghers_modifier":{"d":0.05},"plc_school_of_chivalry_modifier":{"d":0.05},"aristocracy_united":{"d":0.05},"maj_sumpah_palapa_modifier":{"d":0.05},"quality_arms_modifier":{"d":0.03},"parl_cavalry_reserve_mod":{"l":0.1},"gymnopaedia_modifier":{"d":0.05},"disciplined_service_modifier":{"d":0.1},"byz_renewed_military_modifier":{"d":0.01},"legendary_generals_modifier":{"d":0.05}},"trait":{"strict":{"d":0.05}}};
+
+const prettyKey = (k) => String(k).replace(/_/g, " ").replace(/\s+/g, " ").trim();
+
+/* {discipline_est, levy_combat_est, mil_sources: [[label, d, l]], _ruler} */
+function estimateMilitary(c, rulerId) {
+  const S = MIL_SOURCES, src = [];
+  const addSrc = (label, m, scale = 1) => {
+    const d = (m.d || 0) * scale, l = (m.l || 0) * scale;
+    if (d || l) src.push([label, d, l]);
+  };
+  const gov = get(c, "government");
+  const reforms = new Set();
+  for (const e of asList(get(gov, "implemented_reforms"))) {
+    const o = get(e, "object");
+    if (typeof o === "string") reforms.add(o);
+  }
+  const blockOk = (b) => (!b.reform || reforms.has(b.reform)) && (!b.not_reform || !reforms.has(b.not_reform));
+  const adv = get(c, "researched_advances");
+  if (isDict(adv)) for (const [k, v] of adv) if (v === "yes" && S.advance[k]) addSrc("Advance: " + prettyKey(k), S.advance[k]);
+  const laws = get(gov, "implemented_laws");
+  if (isDict(laws)) for (const [, law] of laws) {
+    const o = get(law, "object");
+    for (const b of S.policy[o] || []) if (blockOk(b)) addSrc("Policy: " + prettyKey(o), b);
+  }
+  for (const e of asList(get(gov, "implemented_privileges"))) {
+    const o = get(e, "object");
+    for (const b of S.privilege[o] || []) if (blockOk(b)) addSrc("Privilege: " + prettyKey(o), b);
+  }
+  for (const o of reforms) for (const b of S.reform[o] || []) if (blockOk(b)) addSrc("Reform: " + prettyKey(o), b);
+  const sv = get(gov, "societal_values");
+  if (isDict(sv)) for (const [k, v] of sv) {
+    const x = num(v, NaN), def = S.societal[k];
+    if (!def || !Number.isFinite(x) || x < -100 || x > 100) continue;
+    // negative leans to the left-hand value, positive to the right
+    if (x < 0 && def.left) addSrc("Societal value: " + prettyKey(k.split("_vs_")[0]), def.left, -x / 100);
+    if (x > 0 && def.right) addSrc("Societal value: " + prettyKey(k.split("_vs_")[1] || k), def.right, x / 100);
+  }
+  for (const t of asList(get(get(c, "timed_modifiers"), "timed_modifiers"))) {
+    const name = get(t, "modifier"), def = S.modifier[name];
+    if (def) addSrc("Modifier: " + prettyKey(name), def, num(get(t, "size"), 1) || 1);
+  }
+  return { mil_sources: src, _ruler: typeof rulerId === "string" ? rulerId : null, ...totalMilitary(src) };
+}
+
+function totalMilitary(src) {
+  let d = 0, l = 0;
+  for (const s of src) { d += s[1]; l += s[2]; }
+  return { discipline_est: d, levy_combat_est: l };
+}
+
+/* Ruler traits live in character_db; look up just the rulers shown. */
+async function attachRulerTraits(rows, save, sections) {
+  const want = new Map(rows.filter((r) => r._ruler).map((r) => [r._ruler, r]));
+  if (want.size && sections.has("character_db")) {
+    const text = await readSpan(save, ...sections.get("character_db")[0]);
+    for (const [id, r] of want) {
+      const at = text.indexOf("\n" + id + "={");
+      if (at < 0) continue;
+      const end = text.indexOf("\n}", at + 1);
+      const body = text.slice(at, end > 0 ? end : at + 4000);
+      const tm = body.match(/\n\ttraits=\{([^}]*)\}/);
+      for (const t of tm ? tm[1].split(/\s+/).filter(Boolean) : []) {
+        const def = MIL_SOURCES.trait[t];
+        if (def) r.mil_sources.push(["Ruler trait: " + prettyKey(t), def.d || 0, def.l || 0]);
+      }
+      Object.assign(r, totalMilitary(r.mil_sources));
+    }
+  }
+  for (const r of rows) delete r._ruler;
+}
+
 /* Advances gained since the start: everything researched, minus the ones a
    country of its starting technology level begins the game with. The save
    keeps no research dates, so this is the only baseline available. */
@@ -1255,7 +1332,7 @@ async function extract(save, sections, topAi = 0) {
     "last_months_army_maintenance last_months_navy_maintenance").split(" ");
   const BLK = ("score currency_data economy counters last_month_produced historical_population " +
     "historical_tax_base historical_economical_base owned_locations provinces " +
-    "variables").split(" ");
+    "variables government timed_modifiers").split(" ");
 
   const countries = new Map();
   for (const [cid, chunk] of chunks) {
@@ -1297,6 +1374,9 @@ async function extract(save, sections, topAi = 0) {
   const raw = new Map();
   const dev = new Counter(), tax = new Counter(), ptax = new Counter();
   const ctlSum = new Counter(), ctlWsum = new Counter();
+  // Levies each pop type in a location can supply (thousands) - the
+  // nearest thing the save has to a country's potential levies.
+  const levyPot = new Counter();
   if (sections.has("locations")) {
     let ltext = await readSpan(save, ...sections.get("locations")[0]);
     for (const part of ltext.split(/\n\t\t(?=\d+=\{)/)) {
@@ -1320,6 +1400,7 @@ async function extract(save, sections, topAi = 0) {
         ctlSum.add(cid, parseFloat(ct[1]));
         if (dv) ctlWsum.add(cid, parseFloat(ct[1]) * parseFloat(dv[1]));
       }
+      for (const lv of part.matchAll(/\n\t\t\t\t\t\tlevies=([\d.]+)/g)) levyPot.add(cid, parseFloat(lv[1]));
     }
     ltext = null;
   }
@@ -1529,6 +1610,8 @@ async function extract(save, sections, topAi = 0) {
       army: army.val(cid), navy: navy.val(cid),
       levies: levies.val(cid), regulars: regulars.val(cid),
       mercs: mercs.val(cid), merc_companies: (companies.get(cid) || new Set()).size,
+      levies_potential: levyPot.val(cid),
+      ...estimateMilitary(c, get(dictOr(get(c, "government")), "ruler")),
       army_morale: weight.a.val(cid) ? moraleW.a.val(cid) / weight.a.val(cid) : 0,
       army_exp: weight.a.val(cid) ? expW.a.val(cid) / weight.a.val(cid) : 0,
       navy_levies: navyLevies.val(cid), navy_regulars: navyRegulars.val(cid), navy_mercs: navyMercs.val(cid),
@@ -1548,6 +1631,7 @@ async function extract(save, sections, topAi = 0) {
     });
   }
   rows.sort((a, b) => a.gp_rank - b.gp_rank);
+  await attachRulerTraits(rows, save, sections);
 
   let worldPop = 0;
   for (const c of countries.values()) worldPop += num(get(c, "last_months_population"));

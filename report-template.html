@@ -338,6 +338,7 @@ const worldArmy=R.reduce((a,r)=>a+N(r.army),0);
 const FIELDS=D.fields||{}, CFG=D.config||{};
 const pct=v=>(N(v)*100).toFixed(0)+"%";
 const plus=v=>(N(v)>=0?"+":"")+int(v);
+const bonus=v=>(N(v)>=0?"+":"-")+(Math.abs(N(v))*100).toFixed(1)+"%";
 const dash='<span class="zero">&mdash;</span>';
 /* Per-field rendering. Anything not listed falls back to a plain number. */
 const SPEC={
@@ -357,6 +358,8 @@ const SPEC={
   navy_regulars:{fmt:r=>r.navy_regulars?int(r.navy_regulars):dash},
   navy_mercs:{fmt:r=>r.navy_mercs?int(r.navy_mercs):dash},
   merc_companies:{bar:false,fmt:r=>r.merc_companies?int(r.merc_companies):dash},
+  levies_potential:{fmt:r=>r.levies_potential?men(r.levies_potential):dash},
+  discipline_est:{fmt:r=>bonus(r.discipline_est)}, levy_combat_est:{fmt:r=>bonus(r.levy_combat_est)},
   army_morale:{fmt:r=>r.army_morale?f2(r.army_morale):dash},
   navy_morale:{fmt:r=>r.navy_morale?f2(r.navy_morale):dash},
   army_exp:{fmt:r=>r.army_exp?f1(r.army_exp):dash},
@@ -451,6 +454,7 @@ function detailPanel(r){
       +kv("Goods produced",f1(r.total_produced),rk("produced")))
   + grp("Army", kv("Standing army",r.army?men(r.army)+" men":"none")
       +kv("Levies raised",r.levies?men(r.levies)+" men":"none")
+      +kv("Potential levies (est.)",r.levies_potential?men(r.levies_potential)+" men":"none")
       +kv("Regulars",r.regulars?men(r.regulars)+" men":"none")
       +kv("Mercenaries",r.mercs?men(r.mercs)+" men":"none")
       +kv("Mercenary companies hired",N(r.merc_companies)||"none")
@@ -458,6 +462,8 @@ function detailPanel(r){
       +kv("Average experience",r.army_exp?f1(r.army_exp):"&ndash;")
       +kv("Manpower",men(r.manpower)+" of "+men(r.max_manpower))
       +kv("Army tradition",f1(r.army_tradition))
+      +kv("Discipline bonus (est.)",bonus(r.discipline_est))
+      +kv("Levy combat bonus (est.)",bonus(r.levy_combat_est))
       +kv("Monthly upkeep",f1(r.army_upkeep))
       +kv("Men killed",int(r.kills),rk("kills")))
   + grp("Navy", kv("Ships",r.navy?int(r.navy):"none")
@@ -468,8 +474,11 @@ function detailPanel(r){
       +kv("Average experience",r.navy_exp?f1(r.navy_exp):"&ndash;")
       +kv("Sailors",men(r.sailors)+" of "+men(r.max_sailors))
       +kv("Navy tradition",f1(r.navy_tradition))
-      +kv("Monthly upkeep",f1(r.navy_upkeep))
-      +'<div class="kv"><span style="font-size:11.5px;line-height:1.35">Discipline, combat ability and potential levies are worked out by the game while it runs and aren&rsquo;t written to saves.</span></div>')
+      +kv("Monthly upkeep",f1(r.navy_upkeep)))
+  + '<div class="grp full"><h4>Discipline &amp; levy combat bonus &mdash; estimated from what the save records</h4><div class="chips">'
+      + ((r.mil_sources||[]).length?(r.mil_sources||[]).map(s=>'<span class="chip">'+esc(s[0])
+        +(s[1]?'<b>'+bonus(s[1])+' disc.</b>':'')+(s[2]?'<b>'+bonus(s[2])+' levy</b>':'')+'</span>').join(""):'<span class="chip">no recorded sources</span>')
+      + '</div><div class="kv" style="margin-top:6px"><span style="font-size:11.5px;line-height:1.4">The game doesn&rsquo;t save these values, so this adds up advances, laws, privileges, reforms, societal values, event modifiers and ruler traits. It leaves out estate power, cabinet actions, religion, generals and automatic modifiers, and levy units also take &minus;10% discipline. Potential levies are the levy figures the save keeps for each location&rsquo;s pops, added up.</span></div></div>'
   + grp("State", kv("Great power rank",r.gp_rank>900?"unranked":"#"+r.gp_rank)
       +kv("Great power points",f1(r.gp_points))+kv("World score place",'#'+int(r.score_place))
       +kv("ADM / DIP / MIL",f1(r.score.ADM)+" / "+f1(r.score.DIP)+" / "+f1(r.score.MIL))
@@ -503,7 +512,7 @@ function deltaHtml(k,now,was,withPct){
   if(k==="gp_rank"&&(N(now[k])>900||N(was[k])>900)) return "";
   const d=N(now[k])-N(was[k]);
   if(!d) return N(now[k])?' <span class="delta same">&plusmn;0</span>':"";
-  const t=plain(colSpec(k).fmt({...now,[k]:Math.abs(d),advances_gained:null}));
+  const t=plain(colSpec(k).fmt({...now,[k]:Math.abs(d),advances_gained:null})).replace(/^\+/,"");
   if(!t||t==="-") return "";
   const good=(d>0)!==WORSE_UP.has(k);
   const pct=withPct&&N(was[k])&&k!=="gp_rank"?" ("+(d>0?"+":"-")+Math.abs(d/N(was[k])*100).toFixed(0)+"%)":"";
@@ -646,7 +655,7 @@ render();
     {k:"taxbase",t:"Tax base",hist:"tax_hist"},
     {k:"econbase",t:"Econ base",hist:"econ_hist"},
     {k:"income",t:"Income"},{k:"locations",t:"Locations"},{k:"dev",t:"Development"},
-    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"advances",t:"Advances"},{k:"gold",t:"Gold"},
+    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"discipline_est",t:"Discipline (est.)",fmt:v=>bonus(v)},{k:"levy_combat_est",t:"Levy combat (est.)",fmt:v=>bonus(v)},{k:"advances",t:"Advances"},{k:"gold",t:"Gold"},
     {k:"prestige",t:"Prestige"},{k:"gp_rank",t:"Great-power rank",invert:true}
   ];
   const num=v=>{const a=Math.abs(v); return a>=1000?int(v):a>=100?String(Math.round(v)):a>=10?String(+v.toFixed(1)):String(+v.toFixed(2));};

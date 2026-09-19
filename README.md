@@ -46,6 +46,17 @@ Output matches the Python script: extracted numbers are identical, and the
 map is within one colour level per pixel. Flags differ only by resampling
 filter.
 
+## Military estimates
+
+Saves don't record discipline, levy combat ability or potential levies, so
+the page estimates them. Discipline and levy combat add up the bonuses from
+what the save does record (advances, laws, privileges, reforms, societal
+values, event modifiers, ruler traits), using a table built from the game
+files; potential levies sum the levy figures the save keeps for each
+location's pops. After a game patch, regenerate the table with
+`py tools/extract_military_modifiers.py` and paste it over `MIL_SOURCES` in
+`js/worker.js`.
+
 ## Running locally
 
 The page fetches its report template, so serve it over HTTP rather than
