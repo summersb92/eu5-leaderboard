@@ -257,6 +257,13 @@ footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); colo
   <div class="sctabs" id="sctabs" role="group" aria-label="Chart view"></div>
   <p class="note" id="scnote"></p>
   <div class="chartbox"><svg class="scatter" id="sc" viewBox="0 0 780 440" role="img"></svg></div>
+  <div class="mapactions">
+    <button class="btn" id="scimg" type="button">Copy chart image</button>
+    <button class="btn" id="scpng" type="button">Download image</button>
+    <button class="btn" id="sctxt" type="button">Copy for Discord (text)</button>
+  </div>
+  <details class="copywrap"><summary>&#9656; Show the Discord text</summary>
+    <textarea id="sctext" readonly spellcheck="false"></textarea></details>
 </section>
 
 <section>
@@ -563,6 +570,40 @@ function render(){
 }
 render();
 
+/* ---- turn an on-page chart (inline SVG using CSS variables) into a PNG ---- */
+function chartPng(svg,title,sub){
+  const NS="http://www.w3.org/2000/svg", cs=getComputedStyle(document.documentElement);
+  const resolve=s=>s.replace(/var\((--[\w-]+)\)/g,(m,n)=>cs.getPropertyValue(n).trim()||"#888");
+  const vb=svg.viewBox.baseVal, pad=18, head=title?60:0;
+  const W0=vb.width+pad*2, H0=vb.height+pad*2+head;
+  const out=document.createElementNS(NS,"svg");
+  out.setAttribute("xmlns",NS); out.setAttribute("width",W0); out.setAttribute("height",H0);
+  out.setAttribute("viewBox","0 0 "+W0+" "+H0);
+  const add=(tag,attrs,text)=>{const e=document.createElementNS(NS,tag);
+    for(const k in attrs) e.setAttribute(k,attrs[k]); if(text!=null) e.textContent=text; out.appendChild(e); return e;};
+  add("rect",{width:W0,height:H0,fill:"var(--surface)"});
+  if(title){
+    add("text",{x:pad+2,y:pad+24,"font-family":"Georgia,'Times New Roman',serif","font-size":22,"font-weight":700,fill:"var(--ink)"},title);
+    add("text",{x:pad+2,y:pad+46,"font-family":"Arial,Helvetica,sans-serif","font-size":12.5,fill:"var(--ink-3)"},sub||"");
+  }
+  const g=add("g",{transform:"translate("+pad+","+(pad+head)+")"});
+  for(const n of svg.childNodes) g.appendChild(n.cloneNode(true));
+  // tooltips aren't wanted in a picture
+  g.querySelectorAll("title").forEach(t=>t.remove());
+  const xml=resolve(new XMLSerializer().serializeToString(out));
+  return new Promise((resolveP,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const k=2, c=document.createElement("canvas");
+      c.width=W0*k; c.height=H0*k;
+      const ctx=c.getContext("2d"); ctx.scale(k,k); ctx.drawImage(img,0,0);
+      c.toBlob(b=>b?resolveP(b):reject(new Error("couldn't draw the chart")),"image/png");
+    };
+    img.onerror=()=>reject(new Error("couldn't draw the chart"));
+    img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(xml);
+  });
+}
+
 /* ---- scatter: one metric against another, in several views ---- */
 (function(){
   const s=$("sc"), W0=780,H0=440, L=64,Rr=26,T=44,B=54;
@@ -644,6 +685,59 @@ render();
     b.onclick=()=>{ mode=m; try{ localStorage.setItem(MKEY,m.k); }catch(e){} draw(); };
     $("sctabs").appendChild(b);
   });
+  // ---- export this chart for Discord: image (clipboard or file) and text ----
+  const RATIO={
+    tall:{h:"TAX/LOC",f:v=>f2(v),avg:a=>f2(a)+" tax per location"},
+    income:{h:"INC/LOC",f:v=>f2(v),avg:a=>f2(a)+" income per location"},
+    wealth:{h:"TAXED",f:v=>(v*100).toFixed(0)+"%",avg:a=>(a*100).toFixed(0)+"% of wealth taxed"},
+    pop:{h:"PEOPLE/LOC",f:v=>int(v*1000),avg:a=>int(a*1000)+" people per location"}
+  };
+  const groupAvg=()=>{const sx=R.reduce((a,r)=>a+Math.max(0,N(r[mode.x])),0), sy=R.reduce((a,r)=>a+Math.max(0,N(r[mode.y])),0); return sx?sy/sx:0;};
+  const chartTitle=()=>"Tall or wide: "+mode.tab.toLowerCase();
+  const chartSub=()=>W.date+" · group average "+RATIO[mode.k].avg(groupAvg())+" · EU5 "+W.version;
+  const fileBase=()=>("EU5 "+chartTitle()+" "+W.date).replace(/[\\/:*?"<>|]+/g," ").replace(/\s+/g," ");
+  function discordChartText(){
+    const rows=[...R].map(r=>({r,x:N(r[mode.x]),y:N(r[mode.y])}))
+      .map(o=>({...o,q:o.x?o.y/o.x:0})).sort((a,b)=>b.q-a.q);
+    const yf=mode.yf||(v=>f1(v)), xf=v=>mode.x==="locations"?String(Math.round(v)):f1(v);
+    const cols=[
+      {h:"NATION",left:true,v:o=>o.r.name},
+      {h:mode.xl.split(" (")[0],left:false,v:o=>xf(o.x)},
+      {h:mode.yl,left:false,v:o=>yf(o.y)},
+      {h:RATIO[mode.k].h,left:false,v:o=>RATIO[mode.k].f(o.q)}];
+    const cells=rows.map(o=>cols.map(c=>c.v(o)));
+    const widths=cols.map((c,i)=>Math.min(22,Math.max(c.h.length,...cells.map(row=>row[i].length))));
+    const line=vals=>vals.map((v,i)=>{const t=v.length<=widths[i]?v:v.slice(0,widths[i]-1)+"…"; return cols[i].left?t.padEnd(widths[i]):t.padStart(widths[i]);}).join("  ").replace(/\s+$/,"");
+    return "**"+chartTitle()+"**  ·  "+chartSub()+"\n```\n"+[line(cols.map(c=>c.h)),...cells.map(line)].join("\n")+"\n```";
+  }
+  const flash=(btn,label,ok,msg)=>{ btn.textContent=msg; btn.classList.toggle("ok",ok);
+    setTimeout(()=>{btn.textContent=label; btn.classList.remove("ok");},2400); };
+  $("scimg").onclick=function(){
+    const btn=this, png=chartPng($("sc"),chartTitle(),chartSub());
+    try{
+      if(!navigator.clipboard||!window.ClipboardItem) throw new Error("unsupported");
+      // hand the clipboard a promise so the click still counts as the user's
+      navigator.clipboard.write([new ClipboardItem({"image/png":png})])
+        .then(()=>flash(btn,"Copy chart image",true,"Copied — paste into Discord"),
+              ()=>flash(btn,"Copy chart image",false,"Couldn't copy — use Download image"));
+    }catch(e){ flash(btn,"Copy chart image",false,"Not supported here — use Download image"); }
+  };
+  $("scpng").onclick=async function(){
+    const url=URL.createObjectURL(await chartPng($("sc"),chartTitle(),chartSub()));
+    const a=document.createElement("a"); a.href=url; a.download=fileBase()+".png";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+  };
+  $("sctxt").onclick=function(){
+    const txt=discordChartText(), btn=this;
+    const done=ok=>flash(btn,"Copy for Discord (text)",ok,ok?"Copied":"Press ⌘/Ctrl+C");
+    const box=$("sctext"); box.value=txt;
+    if(navigator.clipboard&&navigator.clipboard.writeText)
+      navigator.clipboard.writeText(txt).then(()=>done(true),()=>{ box.closest("details").open=true; box.focus(); box.select(); done(false); });
+    else { box.closest("details").open=true; box.focus(); box.select(); done(false); }
+  };
+  const drawChart=draw;
+  draw=function(){ drawChart(); const box=$("sctext"); if(box) box.value=discordChartText(); };
   draw();
 })();
 
