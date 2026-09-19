@@ -1251,7 +1251,8 @@ async function extract(save, sections, topAi = 0) {
     "last_months_population last_months_tax_income last_months_subject_tax " +
     "last_months_foreign_building_income monthly_trade_balance " +
     "monthly_trade_value last_month_gold_income " +
-    "total_produced max_manpower max_sailors researched_advances starting_technology_level").split(" ");
+    "total_produced max_manpower max_sailors researched_advances starting_technology_level " +
+    "last_months_army_maintenance last_months_navy_maintenance").split(" ");
   const BLK = ("score currency_data economy counters last_month_produced historical_population " +
     "historical_tax_base historical_economical_base owned_locations provinces " +
     "variables").split(" ");
@@ -1328,6 +1329,12 @@ async function extract(save, sections, topAi = 0) {
   progress(0.55);
   const army = new Counter(), levies = new Counter(), regulars = new Counter();
   const mercs = new Counter(), navy = new Counter(), subs = new Counter();
+  // Navy in ships, split the same way as the army; morale and experience
+  // are averaged per unit, weighted by strength (army) or per ship (navy).
+  const navyLevies = new Counter(), navyRegulars = new Counter(), navyMercs = new Counter();
+  const moraleW = { a: new Counter(), n: new Counter() }, expW = { a: new Counter(), n: new Counter() };
+  const weight = { a: new Counter(), n: new Counter() };
+  const companies = new Map(); // cid -> Set of hired mercenary company ids
 
   // Units belonging to a hired mercenary company. Available companies live
   // under mercenary_manager.pool; hired ones get a record in its database.
@@ -1353,15 +1360,30 @@ async function extract(save, sections, topAi = 0) {
       const v = st ? parseFloat(st[1]) : 1.0;
       const cid = o[1];
       subs.add(cid, 1);
-      if (t[1].startsWith("n_")) {
-        navy.add(cid, v);
+      // Hired mercenary units carry `mercenary=<company>` (1.3.11 saves);
+      // older saves listed the company's units in mercenary_manager.
+      const mc = part.match(/\n\tmercenary=(\d+)/);
+      const u = part.match(/\n\tunit=(\d+)/);
+      const isMerc = !!mc || !!(u && mercUnits.has(u[1]));
+      const isLevy = !isMerc && part.includes("\n\tlevies=");
+      if (mc) {
+        if (!companies.has(cid)) companies.set(cid, new Set());
+        companies.get(cid).add(mc[1]);
+      }
+      // Each naval subunit is one ship (`number=` is only its ordinal name).
+      const kind = t[1].startsWith("n_") ? "n" : "a";
+      const w = kind === "n" ? 1 : v;
+      const mo = part.match(/\n\tmorale=([\d.]+)/), ex = part.match(/\n\texperience=([\d.]+)/);
+      weight[kind].add(cid, w);
+      if (mo) moraleW[kind].add(cid, parseFloat(mo[1]) * w);
+      if (ex) expW[kind].add(cid, parseFloat(ex[1]) * w);
+      if (kind === "n") {
+        navy.add(cid, w);
+        (isMerc ? navyMercs : isLevy ? navyLevies : navyRegulars).add(cid, w);
         continue;
       }
       army.add(cid, v);
-      const u = part.match(/\n\tunit=(\d+)/);
-      if (u && mercUnits.has(u[1])) mercs.add(cid, v);
-      else if (part.includes("\n\tlevies=")) levies.add(cid, v);
-      else regulars.add(cid, v);
+      (isMerc ? mercs : isLevy ? levies : regulars).add(cid, v);
     }
   }
 
@@ -1506,7 +1528,15 @@ async function extract(save, sections, topAi = 0) {
       govpower: num(get(cd, "government_power")), inflation: num(get(cd, "inflation")),
       army: army.val(cid), navy: navy.val(cid),
       levies: levies.val(cid), regulars: regulars.val(cid),
-      mercs: mercs.val(cid),
+      mercs: mercs.val(cid), merc_companies: (companies.get(cid) || new Set()).size,
+      army_morale: weight.a.val(cid) ? moraleW.a.val(cid) / weight.a.val(cid) : 0,
+      army_exp: weight.a.val(cid) ? expW.a.val(cid) / weight.a.val(cid) : 0,
+      navy_levies: navyLevies.val(cid), navy_regulars: navyRegulars.val(cid), navy_mercs: navyMercs.val(cid),
+      navy_morale: weight.n.val(cid) ? moraleW.n.val(cid) / weight.n.val(cid) : 0,
+      navy_exp: weight.n.val(cid) ? expW.n.val(cid) / weight.n.val(cid) : 0,
+      sailors: num(get(cd, "sailors")), max_sailors: num(get(c, "max_sailors")),
+      army_upkeep: num(get(c, "last_months_army_maintenance")),
+      navy_upkeep: num(get(c, "last_months_navy_maintenance")),
       subunits: Math.trunc(subs.val(cid)), kills: get(c, "kills") || 0,
       war_battle: wl.val("Battle"), war_attrition: wl.val("Attrition"),
       goods: toObj(dictOr(get(c, "last_month_produced")), (v) => num(v)),

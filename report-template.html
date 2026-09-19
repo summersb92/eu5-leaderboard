@@ -352,7 +352,16 @@ const SPEC={
   levies:{fmt:r=>r.levies?men(r.levies):dash},
   regulars:{fmt:r=>r.regulars?men(r.regulars):dash},
   mercs:{fmt:r=>r.mercs?men(r.mercs):dash},
-  navy:{fmt:r=>r.navy?men(r.navy):dash},
+  navy:{fmt:r=>r.navy?int(r.navy):dash},
+  navy_levies:{fmt:r=>r.navy_levies?int(r.navy_levies):dash},
+  navy_regulars:{fmt:r=>r.navy_regulars?int(r.navy_regulars):dash},
+  navy_mercs:{fmt:r=>r.navy_mercs?int(r.navy_mercs):dash},
+  merc_companies:{bar:false,fmt:r=>r.merc_companies?int(r.merc_companies):dash},
+  army_morale:{fmt:r=>r.army_morale?f2(r.army_morale):dash},
+  navy_morale:{fmt:r=>r.navy_morale?f2(r.navy_morale):dash},
+  army_exp:{fmt:r=>r.army_exp?f1(r.army_exp):dash},
+  navy_exp:{fmt:r=>r.navy_exp?f1(r.navy_exp):dash},
+  sailors:{fmt:r=>men(r.sailors)}, max_sailors:{fmt:r=>men(r.max_sailors)},
   manpower:{fmt:r=>men(r.manpower)}, max_manpower:{fmt:r=>men(r.max_manpower)},
   kills:{fmt:r=>r.kills?int(r.kills):dash},
   war_battle:{fmt:r=>r.war_battle?int(r.war_battle):dash},
@@ -440,10 +449,27 @@ function detailPanel(r){
   + grp("Commerce", kv("Subject tax base",f1(r.subject_tax_base))
       +kv("Trade value",f1(r.trade_value))
       +kv("Goods produced",f1(r.total_produced),rk("produced")))
-  + grp("Arms", kv("Standing army",r.army?men(r.army)+" men":"none")
-      +kv("Navy",r.navy?men(r.navy)+" crew":"none")+kv("Regiments",r.subunits)
-      +kv("Manpower pool",men(r.max_manpower)+" men")+kv("Army tradition",f1(r.army_tradition))
-      +kv("Navy tradition",f1(r.navy_tradition))+kv("Men killed",int(r.kills),rk("kills")))
+  + grp("Army", kv("Standing army",r.army?men(r.army)+" men":"none")
+      +kv("Levies raised",r.levies?men(r.levies)+" men":"none")
+      +kv("Regulars",r.regulars?men(r.regulars)+" men":"none")
+      +kv("Mercenaries",r.mercs?men(r.mercs)+" men":"none")
+      +kv("Mercenary companies hired",N(r.merc_companies)||"none")
+      +kv("Average morale",r.army_morale?f2(r.army_morale):"&ndash;")
+      +kv("Average experience",r.army_exp?f1(r.army_exp):"&ndash;")
+      +kv("Manpower",men(r.manpower)+" of "+men(r.max_manpower))
+      +kv("Army tradition",f1(r.army_tradition))
+      +kv("Monthly upkeep",f1(r.army_upkeep))
+      +kv("Men killed",int(r.kills),rk("kills")))
+  + grp("Navy", kv("Ships",r.navy?int(r.navy):"none")
+      +kv("Levy ships",N(r.navy_levies)||"none")
+      +kv("Regular ships",N(r.navy_regulars)||"none")
+      +kv("Mercenary ships",N(r.navy_mercs)||"none")
+      +kv("Average morale",r.navy_morale?f2(r.navy_morale):"&ndash;")
+      +kv("Average experience",r.navy_exp?f1(r.navy_exp):"&ndash;")
+      +kv("Sailors",men(r.sailors)+" of "+men(r.max_sailors))
+      +kv("Navy tradition",f1(r.navy_tradition))
+      +kv("Monthly upkeep",f1(r.navy_upkeep))
+      +'<div class="kv"><span style="font-size:11.5px;line-height:1.35">Discipline, combat ability and potential levies are worked out by the game while it runs and aren&rsquo;t written to saves.</span></div>')
   + grp("State", kv("Great power rank",r.gp_rank>900?"unranked":"#"+r.gp_rank)
       +kv("Great power points",f1(r.gp_points))+kv("World score place",'#'+int(r.score_place))
       +kv("ADM / DIP / MIL",f1(r.score.ADM)+" / "+f1(r.score.DIP)+" / "+f1(r.score.MIL))
@@ -620,7 +646,7 @@ render();
     {k:"taxbase",t:"Tax base",hist:"tax_hist"},
     {k:"econbase",t:"Econ base",hist:"econ_hist"},
     {k:"income",t:"Income"},{k:"locations",t:"Locations"},{k:"dev",t:"Development"},
-    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"advances",t:"Advances"},{k:"gold",t:"Gold"},
+    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"advances",t:"Advances"},{k:"gold",t:"Gold"},
     {k:"prestige",t:"Prestige"},{k:"gp_rank",t:"Great-power rank",invert:true}
   ];
   const num=v=>{const a=Math.abs(v); return a>=1000?int(v):a>=100?String(Math.round(v)):a>=10?String(+v.toFixed(1)):String(+v.toFixed(2));};
