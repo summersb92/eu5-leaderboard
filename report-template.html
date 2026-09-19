@@ -132,7 +132,23 @@ td.l{text-align:left}
 .tlchip .tlname{font:500 12px/1 Archivo,sans-serif; color:var(--ink-3)}
 .tlchip[aria-pressed="false"]{opacity:.4; text-decoration:line-through}
 .tlchip:hover{border-color:var(--accent)}
+svg.tlchart{cursor:crosshair; touch-action:pan-y}
+svg.tlchart:focus{outline:none}
+.chartbox:focus-within{outline:2px solid var(--accent-wash)}
 svg.tlchart.focus path,svg.tlchart.focus circle,svg.tlchart.focus text[data-id]{opacity:.15}
+svg.tlchart #tlhover circle{opacity:1!important}
+.tltip{position:absolute; pointer-events:none; z-index:5; background:var(--raised); color:var(--ink);
+  border:1px solid var(--line); border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,.18);
+  padding:8px 10px 7px; font-size:12px; min-width:190px; max-width:280px}
+.tltip[hidden]{display:none}
+.tltip h5{margin:0 0 6px; font:700 10.5px/1.2 Archivo,sans-serif; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3)}
+.tltip .tr{display:flex; align-items:center; gap:6px; padding:1.5px 0; color:var(--ink-2)}
+.tltip .tr.hi{color:var(--ink); font-weight:700}
+.tltip .rk{width:16px; text-align:right; color:var(--ink-3); font:500 10.5px "IBM Plex Mono",monospace}
+.tltip .sw{width:9px; height:9px; border-radius:2px; flex:none}
+.tltip .tg{font:600 11px "IBM Plex Mono",monospace}
+.tltip .nm{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px}
+.tltip .v{margin-left:auto; padding-left:10px; font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
 svg.tlchart.focus .hi{opacity:1!important; stroke-width:3.2}
 .chghead{display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; margin:34px 0 12px}
 .chghead h3{font-family:Fraunces,Georgia,serif; font-weight:600; font-size:20px; margin:0}
@@ -226,7 +242,8 @@ footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); colo
   <div class="sechead"><h2>Over time</h2><span class="rule"></span><span class="eyebrow" style="margin:0" id="tlrange"></span></div>
   <p class="note" id="tlnote"></p>
   <div class="sctabs" id="tltabs" role="group" aria-label="Figure to chart"></div>
-  <div class="chartbox" style="margin-top:12px"><svg class="scatter tlchart" id="tl" viewBox="0 0 780 420" role="img"></svg>
+  <div class="chartbox" style="margin-top:12px;position:relative"><svg class="scatter tlchart" id="tl" viewBox="0 0 780 420" role="img"></svg>
+    <div class="tltip" id="tltip" hidden></div>
     <div class="tlleg" id="tlleg"></div></div>
   <div id="chgwrap" hidden>
     <div class="chghead"><h3>What changed</h3>
@@ -357,7 +374,8 @@ const SPEC={
   control:{fmt:r=>pct(r.control)}, control_wtd:{fmt:r=>pct(r.control_wtd)},
   inflation:{fmt:r=>f2(r.inflation)+"%"},
   debt:{bar:false,fmt:r=>r.debt?'<span class="warnv">'+int(r.debt)+'</span>':dash},
-  army:{fmt:r=>r.army?men(r.army):dash},
+  // shown as the sum of the rounded parts, so the columns visibly add up
+  army:{tip:"Levies + regulars + mercenaries",fmt:r=>{const t=["levies","regulars","mercs"].reduce((a,k)=>a+Math.round(N(r[k])*1000),0); return t?t.toLocaleString("en-US"):dash;}},
   levies:{fmt:r=>r.levies?men(r.levies):dash},
   regulars:{fmt:r=>r.regulars?men(r.regulars):dash},
   mercs:{fmt:r=>r.mercs?men(r.mercs):dash},
@@ -422,6 +440,7 @@ function head(){
   const tr=$("hrow"); tr.innerHTML="";
   COLS.forEach(c=>{
     const th=el("th",(c.cls==="l"||c.cls==="gp")?"l":null,c.t+'<span class="car">&#9660;</span>');
+    if(c.tip) th.title=c.tip;
     if(c.k===sortKey){th.setAttribute("aria-sort",sortAsc?"ascending":"descending");
       th.querySelector(".car").innerHTML=sortAsc?"&#9650;":"&#9660;";}
     th.tabIndex=0;
@@ -460,7 +479,7 @@ function detailPanel(r){
   + grp("Commerce", kv("Subject tax base",f1(r.subject_tax_base))
       +kv("Trade value",f1(r.trade_value))
       +kv("Goods produced",f1(r.total_produced),rk("produced")))
-  + grp("Army", kv("Standing army",r.army?men(r.army)+" men":"none")
+  + grp("Army", kv("Army (levies + regulars + mercenaries)",r.army?SPEC.army.fmt(r)+" men":"none")
       +kv("Levies raised",r.levies?men(r.levies)+" men":"none")
       +kv("Potential levies (est.)",r.levies_potential?men(r.levies_potential)+" men":"none")
       +kv("Regulars",r.regulars?men(r.regulars)+" men":"none")
@@ -787,6 +806,7 @@ function chartPng(svg,title,sub){
   let mode=avail[0];
   try{ const v=localStorage.getItem(KEY); mode=avail.find(m=>m.k===v)||mode; }catch(e){}
   const hidden=new Set();
+  let view=null; // what the last draw put on screen, for the hover tooltip
 
   function draw(){
     const fmt=mode.fmt||num;
@@ -794,7 +814,7 @@ function chartPng(svg,title,sub){
     const xs=[...all.flatMap(s=>s.pts.map(p=>p[0])),...(MULTI?TL.map(s=>yearOf(s.date)):[])];
     const ys=all.flatMap(s=>s.pts.map(p=>p[1]));
     let g="";
-    if(!ys.length){ svg.innerHTML='<text x="'+W0/2+'" y="'+H0/2+'" text-anchor="middle" fill="var(--ink-3)" font-size="13">Every nation is hidden &mdash; click one below.</text>'; return; }
+    if(!ys.length){ view=null; tip.hidden=true; svg.innerHTML='<text x="'+W0/2+'" y="'+H0/2+'" text-anchor="middle" fill="var(--ink-3)" font-size="13">Every nation is hidden &mdash; click one below.</text>'; return; }
     let x0=Math.min(...xs), x1=Math.max(...xs);
     if(x1-x0<1){ x0-=0.5; x1+=0.5; }
     let lo=mode.invert?1:Math.min(0,...ys), hi=Math.max(...ys);
@@ -822,8 +842,7 @@ function chartPng(svg,title,sub){
       const d=pts.map((p,i)=>(i?"L":"M")+px(p[0]).toFixed(1)+" "+py(p[1]).toFixed(1)).join(" ");
       g+='<path data-id="'+esc(r.id)+'" d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/>';
       pts.filter(p=>p[2]).forEach(p=>{
-        g+='<circle data-id="'+esc(r.id)+'" cx="'+px(p[0]).toFixed(1)+'" cy="'+py(p[1]).toFixed(1)+'" r="4" fill="'+col+'" stroke="var(--surface)" stroke-width="1.5"><title>'
-          +esc(r.name)+' &middot; '+esc(p[3])+': '+esc(mode.invert?"#"+p[1]:fmt(p[1]))+'</title></circle>';
+        g+='<circle data-id="'+esc(r.id)+'" cx="'+px(p[0]).toFixed(1)+'" cy="'+py(p[1]).toFixed(1)+'" r="4" fill="'+col+'" stroke="var(--surface)" stroke-width="1.5"/>';
       });
       const last=pts[pts.length-1];
       ends.push({id:r.id,tag:r.tag,x:px(last[0]),y:py(last[1]),col});
@@ -836,8 +855,11 @@ function chartPng(svg,title,sub){
     ends.forEach(e=>{
       g+='<text data-id="'+esc(e.id)+'" x="'+(e.x+8).toFixed(1)+'" y="'+(e.y+4).toFixed(1)+'" font-size="12" font-family="IBM Plex Mono,monospace" font-weight="600" fill="var(--ink-2)">'+esc(e.tag)+'</text>';
     });
+    g+='<g id="tlhover" pointer-events="none"></g>';
     svg.innerHTML=g;
-    svg.setAttribute("aria-label",mode.t+" over time, by nation");
+    view={all,px,py,x0,x1,xs:[...new Set(all.flatMap(s=>s.pts.map(p=>p[0])))].sort((a,b)=>a-b)};
+    tip.hidden=true; hoverIdx=null;
+    svg.setAttribute("aria-label",mode.t+" over time, by nation. Hover, or focus and use the arrow keys, to read values.");
     $("tltabs").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.k===mode.k)));
   }
   avail.forEach(m=>{
@@ -845,6 +867,82 @@ function chartPng(svg,title,sub){
     b.onclick=()=>{ mode=m; try{ localStorage.setItem(KEY,m.k); }catch(e){} draw(); };
     $("tltabs").appendChild(b);
   });
+  // ---- hover: guide line at the nearest year, every nation's value there ----
+  const tip=$("tltip");
+  let hoverIdx=null;
+  function toView(e){
+    const b=svg.getBoundingClientRect();
+    return {x:(e.clientX-b.left)*W0/b.width, y:(e.clientY-b.top)*H0/b.height};
+  }
+  function showAt(i, vy){
+    const V=view; if(!V||!V.xs.length) return;
+    hoverIdx=Math.max(0,Math.min(V.xs.length-1,i));
+    const xv=V.xs[hoverIdx], cx=V.px(xv);
+    const rows=[];
+    V.all.forEach(({r,pts})=>{
+      const p=pts.find(q=>Math.abs(q[0]-xv)<1e-6);
+      if(p) rows.push({r,p,cy:V.py(p[1])});
+    });
+    if(!rows.length){ hideTip(); return; }
+    // the line nearest the pointer (or the top one when using the keyboard)
+    let near=rows[0];
+    if(vy!=null) rows.forEach(o=>{ if(Math.abs(o.cy-vy)<Math.abs(near.cy-vy)) near=o; });
+    rows.sort((a,b)=>mode.invert?a.p[1]-b.p[1]:b.p[1]-a.p[1]);
+    if(vy==null) near=rows[0];
+    let g='<line x1="'+cx.toFixed(1)+'" y1="'+(T-6)+'" x2="'+cx.toFixed(1)+'" y2="'+(H0-B)+'" stroke="var(--ink-2)" stroke-width="1" opacity=".55"/>';
+    rows.forEach(o=>{
+      const col=o.r.color?esc(o.r.color):"var(--verd)";
+      g+='<circle cx="'+cx.toFixed(1)+'" cy="'+o.cy.toFixed(1)+'" r="'+(o===near?5.5:3.5)+'" fill="'+col+'" stroke="var(--surface)" stroke-width="1.5"/>';
+    });
+    svg.querySelector("#tlhover").innerHTML=g;
+    svg.classList.add("focus");
+    svg.querySelectorAll(".hi").forEach(n=>n.classList.remove("hi"));
+    svg.querySelectorAll('[data-id="'+CSS.escape(near.r.id)+'"]').forEach(n=>n.classList.add("hi"));
+    const save=MULTI?TL.find(s=>Math.abs(yearOf(s.date)-xv)<1e-6):null;
+    const label=save?save.date+" · save":String(Math.round(xv));
+    const fmt=v=>mode.invert?"#"+Math.round(v):(mode.fmt||num)(v);
+    tip.innerHTML='<h5>'+esc(mode.t)+' &middot; '+esc(label)+'</h5>'+rows.map((o,k)=>
+      '<div class="tr'+(o===near?' hi':'')+'"><span class="rk">'+(k+1)+'</span><span class="sw" style="background:'
+      +(o.r.color?esc(o.r.color):"var(--verd)")+'"></span><span class="tg">'+esc(o.r.tag)+'</span><span class="nm">'
+      +esc(o.r.name)+'</span><span class="v">'+esc(fmt(o.p[1]))+'</span></div>').join("");
+    tip.hidden=false;
+    // place beside the guide line, flipping sides near the right edge
+    const box=svg.parentElement.getBoundingClientRect(), sb=svg.getBoundingClientRect();
+    const gx=sb.left-box.left+cx*sb.width/W0;
+    const w=tip.offsetWidth, h=tip.offsetHeight;
+    let left=gx+14; if(left+w>box.width-6) left=gx-14-w;
+    const gy=vy!=null?sb.top-box.top+vy*sb.height/H0:sb.top-box.top+T;
+    tip.style.left=Math.max(6,left)+"px";
+    tip.style.top=Math.max(6,Math.min(box.height-h-6,gy-h/2))+"px";
+  }
+  function hideTip(){
+    tip.hidden=true; hoverIdx=null;
+    const layer=svg.querySelector("#tlhover"); if(layer) layer.innerHTML="";
+    svg.classList.remove("focus"); svg.querySelectorAll(".hi").forEach(n=>n.classList.remove("hi"));
+  }
+  function nearestIdx(vx){
+    const V=view; if(!V) return 0;
+    const yr=V.x0+(vx-L)/(W0-L-Rr)*(V.x1-V.x0);
+    let best=0;
+    V.xs.forEach((x,i)=>{ if(Math.abs(x-yr)<Math.abs(V.xs[best]-yr)) best=i; });
+    return best;
+  }
+  const onMove=e=>{ if(!view) return; const p=toView(e);
+    if(p.x<L-8||p.x>W0-Rr+8){ hideTip(); return; } showAt(nearestIdx(p.x),p.y); };
+  svg.addEventListener("pointermove",onMove);
+  svg.addEventListener("pointerdown",onMove);
+  svg.addEventListener("pointerleave",hideTip);
+  svg.tabIndex=0;
+  svg.addEventListener("keydown",e=>{
+    if(!view) return;
+    if(e.key==="ArrowRight"||e.key==="ArrowLeft"){
+      e.preventDefault();
+      const i=hoverIdx==null?(e.key==="ArrowRight"?0:view.xs.length-1):hoverIdx+(e.key==="ArrowRight"?1:-1);
+      showAt(i,null);
+    } else if(e.key==="Escape") hideTip();
+  });
+  svg.addEventListener("blur",hideTip);
+
   // legend: click to hide/show a nation, hover to pick its line out
   R.forEach(r=>{
     const b=el("button","tlchip",'<span class="sw" style="background:'+(r.color?esc(r.color):"var(--verd)")+'"></span>'+esc(r.tag)+' <span class="tlname">'+esc(r.name)+'</span>');
