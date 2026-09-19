@@ -1526,7 +1526,7 @@ async function extract(save, sections, topAi = 0) {
       case "locations": return cget(c, "n_owned") || 0;
       case "produced": return num(cget(c, "total_produced"));
       case "trade": return num(cget(c, "monthly_trade_value"));
-      case "army": return levies.val(cid) + regulars.val(cid) + mercs.val(cid);
+      case "army": return Math.max(levyPot.val(cid), levies.val(cid)) + regulars.val(cid) + mercs.val(cid);
       case "levies": return levies.val(cid);
       case "regulars": return regulars.val(cid);
       case "mercs": return mercs.val(cid);
@@ -1607,8 +1607,9 @@ async function extract(save, sections, topAi = 0) {
       army_tradition: num(get(cd, "army_tradition")),
       navy_tradition: num(get(cd, "navy_tradition")),
       govpower: num(get(cd, "government_power")), inflation: num(get(cd, "inflation")),
-      // Army is by definition levies + regulars + mercenaries.
-      army: levies.val(cid) + regulars.val(cid) + mercs.val(cid), navy: navy.val(cid),
+      // Army is the full strength if every levy were called up: potential
+      // levies (which include any already raised) + regulars + mercenaries.
+      army: Math.max(levyPot.val(cid), levies.val(cid)) + regulars.val(cid) + mercs.val(cid), navy: navy.val(cid),
       levies: levies.val(cid), regulars: regulars.val(cid),
       mercs: mercs.val(cid), merc_companies: (companies.get(cid) || new Set()).size,
       levies_potential: levyPot.val(cid),

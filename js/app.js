@@ -96,7 +96,9 @@ function sanitizeData(d) {
     for (const k of ["goods", "raw", "ranks", "score"]) o[k] ||= {};
     for (const k of ["pop_hist", "tax_hist", "econ_hist"]) o[k] ||= [];
     if (!o.pop_hist.length) o.pop_hist = [o.pop || 0];
-    if (["levies", "regulars", "mercs"].some((k) => k in o)) o.army = numOr0(o.levies) + numOr0(o.regulars) + numOr0(o.mercs);
+    // Army = potential levies (which include raised ones) + regulars + mercenaries
+    if (["levies", "regulars", "mercs"].some((k) => k in o))
+      o.army = Math.max(numOr0(o.levies_potential), numOr0(o.levies)) + numOr0(o.regulars) + numOr0(o.mercs);
     for (const k of ["locations", "provinces", "gp_rank", "subunits", "advances", "wars", "rebels", "score_place"])
       o[k] = Math.trunc(numOr0(o[k] ?? (k === "gp_rank" ? 999 : 0)));
     return o;
