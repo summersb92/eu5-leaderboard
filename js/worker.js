@@ -1294,6 +1294,20 @@ function splitEntries(text, openKey) {
 // ==========================================================================
 // Extraction
 // ==========================================================================
+/* Per-country loan and bond figures (yearly rates as fractions, costs per month). */
+function debtFigures(d, ec) {
+  d = d || { loans: 0, loanP: 0, loanI: 0, foreign: 0, bonds: 0, bondP: 0, bondI: 0 };
+  return {
+    loans: d.loans, foreign_loans: d.foreign, loan_principal: d.loanP,
+    loan_interest: d.loanP ? d.loanI / d.loanP : 0, loan_cost: d.loanI / 12,
+    bonds: d.bonds, bond_principal: d.bondP,
+    bond_interest: d.bondP ? d.bondI / d.bondP : 0, bond_cost: d.bondI / 12,
+    debt_cost: (d.loanI + d.bondI) / 12,
+    estate_debt: num(get(ec, "estate_debt")), foreign_debt: num(get(ec, "foreign_debt")),
+    bond_debt: num(get(ec, "bond_debt")),
+  };
+}
+
 async function extract(save, sections, topAi = 0) {
   // ---- metadata: who is the local player -------------------------------
   const metaTxt = (await readSpan(save, ...sections.get("metadata")[0])).slice(0, 200000);
@@ -1468,6 +1482,26 @@ async function extract(save, sections, topAi = 0) {
     }
   }
 
+  // ---- loans and bonds -------------------------------------------------
+  // Each loan: amount (principal), interest (a yearly rate), month (months
+  // left), borrower, and a lender when it's owed to another country rather
+  // than to the borrower's own estates. Government bonds are marked
+  // bond=yes and have no term. A country's debt totals are principal plus
+  // the interest still due, so the monthly cost is principal x rate / 12.
+  const debtOf = new Map(); // cid -> {loans, loanP, loanI, foreign, bonds, bondP, bondI}
+  if (sections.has("loan_manager")) {
+    const ltxt = await readSpan(save, ...sections.get("loan_manager")[0]);
+    for (const part of ltxt.split(/\n(?=\d+=\{)/)) {
+      const b = part.match(/\n\tborrower=(\d+)/), a = part.match(/\n\tamount=([\d.]+)/);
+      if (!b || !a) continue;
+      const amount = parseFloat(a[1]), rate = parseFloat((part.match(/\n\tinterest=([\d.]+)/) || [0, 0])[1]) || 0;
+      if (!debtOf.has(b[1])) debtOf.set(b[1], { loans: 0, loanP: 0, loanI: 0, foreign: 0, bonds: 0, bondP: 0, bondI: 0 });
+      const d = debtOf.get(b[1]);
+      if (/\n\tbond=yes/.test(part)) { d.bonds++; d.bondP += amount; d.bondI += amount * rate; }
+      else { d.loans++; d.loanP += amount; d.loanI += amount * rate; if (/\n\tlender=\d+/.test(part)) d.foreign++; }
+    }
+  }
+
   // ---- wars in progress: per-country losses ----------------------------
   const lost = new Map();
   let nWars = 0;
@@ -1584,6 +1618,7 @@ async function extract(save, sections, topAi = 0) {
       control_wtd: dev.val(cid) ? ctlWsum.val(cid) / dev.val(cid) : 0.0,
       income: num(get(ec, "income")), expense: num(get(ec, "expense")),
       debt: num(get(ec, "total_debt")), loan_capacity: num(get(ec, "loan_capacity")),
+      ...debtFigures(debtOf.get(cid), ec),
       creditworthiness: num(get(ec, "creditworthiness")),
       coin_minting: num(get(ec, "coin_minting")),
       tax_income: num(get(c, "last_months_tax_income")),

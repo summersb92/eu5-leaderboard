@@ -365,6 +365,7 @@ const FIELDS=D.fields||{}, CFG=D.config||{};
 const pct=v=>(N(v)*100).toFixed(0)+"%";
 const plus=v=>(N(v)>=0?"+":"")+int(v);
 const bonus=v=>(N(v)>=0?"+":"-")+(Math.abs(N(v))*100).toFixed(1)+"%";
+const rate=v=>(N(v)*100).toFixed(2)+"%";
 const dash='<span class="zero">&mdash;</span>';
 /* Per-field rendering. Anything not listed falls back to a plain number. */
 const SPEC={
@@ -375,6 +376,13 @@ const SPEC={
   control:{fmt:r=>pct(r.control)}, control_wtd:{fmt:r=>pct(r.control_wtd)},
   inflation:{fmt:r=>f2(r.inflation)+"%"},
   debt:{bar:false,fmt:r=>r.debt?'<span class="warnv">'+int(r.debt)+'</span>':dash},
+  loans:{bar:false,fmt:r=>N(r.loans)?int(r.loans):dash}, bonds:{bar:false,fmt:r=>N(r.bonds)?int(r.bonds):dash},
+  loan_principal:{fmt:r=>N(r.loan_principal)?int(r.loan_principal):dash},
+  bond_principal:{fmt:r=>N(r.bond_principal)?int(r.bond_principal):dash},
+  loan_interest:{bar:false,fmt:r=>N(r.loans)?rate(r.loan_interest):dash},
+  bond_interest:{bar:false,fmt:r=>N(r.bonds)?rate(r.bond_interest):dash},
+  loan_cost:{fmt:r=>N(r.loan_cost)?f1(r.loan_cost):dash}, bond_cost:{fmt:r=>N(r.bond_cost)?f1(r.bond_cost):dash},
+  debt_cost:{fmt:r=>N(r.debt_cost)?f1(r.debt_cost):dash},
   // shown as the sum of the rounded parts, so the columns visibly add up
   // Army = potential levies (which include any raised) + regulars + mercenaries,
   // shown as the sum of the rounded parts so the columns visibly add up
@@ -478,8 +486,20 @@ function detailPanel(r){
       +kv("Control, development-weighted",(N(r.control_wtd)*100).toFixed(1)+"%"))
   + grp("Treasury", kv("Wealth, gold on hand",int(r.gold),rk("gold"))+kv("Monthly income",f1(r.income))
       +kv("Monthly expense",f1(r.expense))+kv("Net",(net>=0?"+":"")+f1(net))
-      +kv("Debt",r.debt?int(r.debt):"none")+kv("Loan capacity",int(r.loan_capacity))
+      +kv("Loan capacity",int(r.loan_capacity))
       +kv("Creditworthiness",f2(r.creditworthiness))+kv("Inflation",f2(r.inflation)+"%"))
+  + grp("Debt", kv("Total owed",r.debt?int(r.debt):"none")
+      +(r.debt?kv("&nbsp;&nbsp;to its estates",int(r.estate_debt))+kv("&nbsp;&nbsp;to other countries",int(r.foreign_debt))
+        +kv("&nbsp;&nbsp;in bonds",int(r.bond_debt)):"")
+      +kv("Loans",N(r.loans)?int(r.loans)+(N(r.foreign_loans)?" ("+int(r.foreign_loans)+" foreign)":""):"none")
+      +(N(r.loans)?kv("&nbsp;&nbsp;borrowed",int(r.loan_principal))+kv("&nbsp;&nbsp;average interest",rate(r.loan_interest)+" a year")
+        +kv("&nbsp;&nbsp;interest per month",f1(r.loan_cost)):"")
+      +kv("Bonds",N(r.bonds)?int(r.bonds):"none")
+      +(N(r.bonds)?kv("&nbsp;&nbsp;raised",int(r.bond_principal))+kv("&nbsp;&nbsp;average interest",rate(r.bond_interest)+" a year")
+        +kv("&nbsp;&nbsp;interest per month",f1(r.bond_cost)):"")
+      +kv("<b style='font-weight:600'>Debt cost per month</b>",N(r.debt_cost)?f1(r.debt_cost)
+        +(N(r.income)?' <span class="rank">'+(N(r.debt_cost)/N(r.income)*100).toFixed(0)+'% of income</span>':''):"none")
+      +'<div class="kv"><span style="font-size:11.5px;line-height:1.35">Owed totals include the interest still due on each loan; the monthly cost is the interest on what was borrowed.</span></div>')
   + grp("Income by source", kv("Tax",f1(r.tax_income))
       +kv("Trade, net",(N(r.trade_balance)>=0?"+":"")+f1(r.trade_balance))
       +kv("Foreign buildings",f1(r.building_income))
@@ -543,7 +563,8 @@ let cmpFrom=0, showDelta=false;          // snapshot the standings compare again
 const plain=s=>String(s).replace(/<[^>]*>/g,"").replace(/&mdash;|&ndash;/g,"-").replace(/&amp;/g,"&").trim();
 const snapRow=(i,id)=>{const s=TL[i]; return s?s.rows.find(x=>x.id===id):null;};
 /* higher is worse for these */
-const WORSE_UP=new Set(["gp_rank","debt","inflation","score_place","war_battle","war_attrition","expense","rebels"]);
+const WORSE_UP=new Set(["gp_rank","debt","inflation","score_place","war_battle","war_attrition","expense","rebels",
+  "loans","loan_principal","loan_interest","loan_cost","bonds","bond_principal","bond_interest","bond_cost","debt_cost"]);
 /* "+0.82 M" style change of field k between two rows, formatted like the column */
 function deltaHtml(k,now,was,withPct){
   if(!was||!(k in was)) return "";
@@ -781,7 +802,7 @@ function chartPng(svg,title,sub){
     {k:"taxbase",t:"Tax base",hist:"tax_hist"},
     {k:"econbase",t:"Econ base",hist:"econ_hist"},
     {k:"income",t:"Income"},{k:"locations",t:"Locations"},{k:"dev",t:"Development"},
-    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"discipline_est",t:"Discipline (est.)",fmt:v=>bonus(v)},{k:"levy_combat_est",t:"Levy combat (est.)",fmt:v=>bonus(v)},{k:"advances",t:"Advances"},{k:"gold",t:"Gold"},
+    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"discipline_est",t:"Discipline (est.)",fmt:v=>bonus(v)},{k:"levy_combat_est",t:"Levy combat (est.)",fmt:v=>bonus(v)},{k:"advances",t:"Advances"},{k:"gold",t:"Gold"},{k:"debt",t:"Debt"},{k:"debt_cost",t:"Debt cost / month"},
     {k:"prestige",t:"Prestige"},{k:"gp_rank",t:"Great-power rank",invert:true}
   ];
   const num=v=>{const a=Math.abs(v); return a>=1000?int(v):a>=100?String(Math.round(v)):a>=10?String(+v.toFixed(1)):String(+v.toFixed(2));};
@@ -1228,7 +1249,7 @@ const XL=(function(){
 /* How each field goes into a spreadsheet: real units, not the page's
    rounded text (population and troops in people, not thousands). */
 const MEN=new Set(["army","levies","regulars","mercs","manpower","max_manpower","sailors","max_sailors","levies_potential"]);
-const WHOLE=new Set(["locations","provinces","subunits","advances","advances_gained","wars","rebels","merc_companies",
+const WHOLE=new Set(["loans","bonds","locations","provinces","subunits","advances","advances_gained","wars","rebels","merc_companies",
   "navy","navy_levies","navy_regulars","navy_mercs","score_place","kills","war_battle","war_attrition","gold","dev","debt"]);
 function xlCol(k){
   const t=FIELDS[k]||k;
@@ -1237,6 +1258,7 @@ function xlCol(k){
   if(MEN.has(k)) return {h:t+" (men)",w:14,style:"int",v:r=>Math.round(N(r[k])*1000)};
   if(k==="control"||k==="control_wtd") return {h:t,w:11,style:"pct",v:r=>N(r[k])};
   if(k==="discipline_est"||k==="levy_combat_est") return {h:t,w:14,style:"pct1",v:r=>N(r[k])};
+  if(k==="loan_interest"||k==="bond_interest") return {h:t+" (yearly)",w:13,style:"pct1",v:r=>N(r[k==="loan_interest"?"loans":"bonds"])?N(r[k]):null};
   if(k==="inflation") return {h:"Inflation (%)",w:11,style:"d2",v:r=>N(r[k])};
   if(WHOLE.has(k)) return {h:t,w:12,style:"int",v:r=>Math.round(N(r[k]))};
   if(/morale|_exp$|creditworthiness|coin_minting/.test(k)) return {h:t,w:12,style:"d2",v:r=>N(r[k])};
