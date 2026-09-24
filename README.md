@@ -13,15 +13,14 @@ are never uploaded and the site needs no server.
 2. Open the page and drop the `.eu5` file on it. In Chrome and Edge, saves
    you pick or drop appear under **Recent saves** for one-click rebuilds on
    later visits (the browser keeps a file handle, not the file or a path).
-3. *(Optional)* Link your `Europa Universalis V` install so the report gets
-   coats of arms and the map; the game's files are read locally and never
-   redistributed. **Choose game folder** uses Chrome/Edge's folder picker,
-   and the folder is remembered for later visits. That picker refuses
-   anything under `Program Files` (the Steam default), so either drag the
-   folder onto the page (works, but only for that visit) or give it a
-   junction outside `Program Files` once (the page shows the command) and
-   pick that. Firefox and Safari use a plain folder input with no such
-   restriction and no memory.
+3. Coats of arms and the political map are built in, from a hosted
+   game-data pack (see below), so a save is all anyone needs. *(Optional)*
+   Link your own `Europa Universalis V` install instead - for a game version
+   without a pack, or mods. **Choose game folder** uses Chrome/Edge's folder
+   picker (remembered for later visits); it refuses anything under
+   `Program Files` (the Steam default), so either drag the folder onto the
+   page or give it a junction outside `Program Files` (the page shows the
+   command). Firefox and Safari use a plain folder input.
 4. *(Optional)* Compare saves over time: give it two or more saves from
    the same campaign (pick or drop them together, tick them under **Recent
    saves**, or use **Add a save to compare** on a built report). The newest
@@ -59,6 +58,27 @@ in any order, from save files or a data file, on any computer - finds that
 gist and reuses its link instead of making another. Different saves get a
 new link, with an option to put them behind the campaign's earlier link. Viewers read the gist through the GitHub API (60 requests an hour
 per viewer) and fall back to the raw gist file.
+
+## Game-data packs
+
+`gamedata/<version>/` holds what reports need from the game, so nobody has
+to link an install: `flags/tag-<TAG>.png` (every country's coat of arms,
+pre-rendered with the page's own renderer; the `tag-` prefix keeps names
+like `AUX` and `CON` legal on Windows), `locations.png` (the game's own map
+image), `map.json` (each location's colour and land/water, each tag's map
+and secondary colours) and `pack.json` (game version, version name, Steam
+build). `gamedata/index.json` lists the packs. A report uses the pack for
+the version its save records, else the newest, and says which it used.
+
+Current pack: **EU5 1.3.11 "Pavia"**, Steam build 24187685, 1,937 flags.
+
+After a game patch, open `tools/build-pack.html` (served over HTTP), point it
+at the install, enter the version, name and Steam build id (from
+`steamapps/appmanifest_3450310.acf`), build, and unzip the result into the
+repository root.
+
+Coat-of-arms and map images are from Europa Universalis V (c) Paradox
+Interactive, included for non-commercial fan use.
 
 ## Military estimates
 

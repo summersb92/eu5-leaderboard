@@ -927,12 +927,148 @@ function resampleCoeffs(inSize, outSize) {
 }
 const clip8 = (v) => (v <= 0 ? 0 : v >= 255 ? 255 : Math.round(v));
 
-async function buildMapData(data, sections, save, fs) {
-  const t0 = performance.now();
+/* Where the map's game data comes from - the linked install or a hosted
+   game-data pack. Either way it gives: each location id's colour in
+   locations.png, which of those colours are land, each tag's map colour and
+   secondary colour, and the locations.png file itself. */
+async function mapSourceFromGame(fs) {
   const mapd = "in_game/map_data", setupd = "in_game/setup/countries";
   const locFile = await fs.file(mapd + "/locations.png");
-  if (!(await fs.file(mapd + "/definitions.txt")) || !locFile) {
-    log("map: map_data not found in " + fs.label + " - skipping");
+  if (!(await fs.file(mapd + "/definitions.txt")) || !locFile) return null;
+  const idToName = await mapLocationNames(fs, mapd);
+  const nameToRgb = await mapLocationColors(fs, mapd);
+  const { colornames, color2 } = await mapTagSetup(fs, setupd);
+  const namedColors = await loadNamedColors(fs);
+  const land = new Set();
+  const topo = await fs.text(mapd + "/location_templates.txt");
+  if (topo != null) {
+    for (const m of topo.matchAll(/(\S+)\s*=\s*\{[^}]*?topography\s*=\s*(\w+)/g)) {
+      if (MAP_WATER_TOPO.has(m[2])) continue;
+      const rgb = nameToRgb.get(m[1]);
+      if (rgb) land.add(rgbKey(rgb));
+    }
+  }
+  const tagRgb = (tag) => { const cn = colornames.get(tag); return cn ? namedColors.get("map_" + cn) || null : null; };
+  return {
+    label: fs.label, locFile, land, tagRgb,
+    locRgb: (lid) => { const n = idToName.get(lid); return n ? nameToRgb.get(n) || null : null; },
+    tagColor2: (tag) => color2.get(tag) || null,
+    /* the same data as a compact JSON, for a hosted pack */
+    toJSON() {
+      const maxId = Math.max(0, ...idToName.keys()), locations = new Array(maxId + 1).fill(0);
+      for (const [lid, name] of idToName) { const c = nameToRgb.get(name); if (c) locations[lid] = rgbKey(c); }
+      const tags = {};
+      for (const t of new Set([...colornames.keys(), ...color2.keys()])) {
+        const a = tagRgb(t), b = color2.get(t);
+        if (a || b) tags[t] = [a ? rgbKey(a) : null, b ? rgbKey(b) : null];
+      }
+      return { locations, land: [...land].sort((x, y) => x - y), tags };
+    },
+  };
+}
+
+const unKey = (k) => [(k >> 16) & 255, (k >> 8) & 255, k & 255];
+async function mapSourceFromPack(pack) {
+  const [meta, locFile] = await Promise.all([packFetch(pack, "map.json", "json"), packFetch(pack, "locations.png", "blob")]);
+  return {
+    label: pack.label, locFile, land: new Set(meta.land),
+    locRgb: (lid) => (meta.locations[lid] ? unKey(meta.locations[lid]) : null),
+    tagRgb: (tag) => (meta.tags[tag] && meta.tags[tag][0] != null ? unKey(meta.tags[tag][0]) : null),
+    tagColor2: (tag) => (meta.tags[tag] && meta.tags[tag][1] != null ? unKey(meta.tags[tag][1]) : null),
+  };
+}
+
+// ==========================================================================
+// Hosted game-data packs (gamedata/<version>/): flags pre-rendered with the
+// same FlagRenderer, plus the map data, so reports get flags and a map
+// without a linked install. Flag and map images are Paradox Interactive's,
+// shared for non-commercial fan use.
+// ==========================================================================
+const PACK_ROOT = new URL("../gamedata/", self.location.href);
+async function packFetch(pack, file, as) {
+  const r = await fetch(new URL(pack.version + "/" + file, PACK_ROOT));
+  if (!r.ok) throw new Error(`game data ${pack.version}/${file}: ${r.status}`);
+  return as === "json" ? r.json() : r.blob();
+}
+const verKey = (v) => String(v || "").split(".").map((x) => parseInt(x, 10) || 0);
+const verCmp = (a, b) => { const x = verKey(a), y = verKey(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; };
+
+/* The pack for the save's game version, else the newest one. */
+async function choosePack(saveVersion) {
+  let index;
+  try {
+    const r = await fetch(new URL("index.json", PACK_ROOT));
+    if (!r.ok) return null;
+    index = await r.json();
+  } catch (e) { return null; }
+  const packs = (index.packs || []).slice().sort((a, b) => verCmp(b.version, a.version));
+  if (!packs.length) return null;
+  const exact = packs.find((p) => p.version === saveVersion);
+  const p = exact || packs[0];
+  return { ...p, exact: !!exact, label: `EU5 ${p.version}${p.name ? " “" + p.name + "”" : ""} game data` };
+}
+
+async function blobToDataURI(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return "data:" + (blob.type || "image/png") + ";base64," + btoa(bin);
+}
+
+async function attachFlagsFromPack(rows, pack) {
+  let n = 0, done = 0;
+  await Promise.all(rows.map(async (r) => {
+    try {
+      if (!/^[A-Z0-9_]{1,10}$/.test(r.tag)) return;
+      const blob = await packFetch(pack, "flags/tag-" + r.tag + ".png", "blob");
+      r.flag = await blobToDataURI(new Blob([blob], { type: "image/png" }));
+      n++;
+    } catch (e) { /* no pre-rendered flag for this tag */ }
+    progress(0.6 + 0.15 * (++done / rows.length));
+  }));
+  log(`flags: ${n} of ${rows.length} from ${pack.label}`);
+}
+
+/* Build a pack from a linked install: every country tag's flag, and the
+   map data. Used by tools/build-pack.html after a game patch. */
+async function buildPack(fs) {
+  stage("Reading the game's countries…");
+  const tags = new Set();
+  for (const fn of (await fs.list("in_game/setup/countries")) || []) {
+    if (!fn.endsWith(".txt")) continue;
+    const txt = await fs.text("in_game/setup/countries/" + fn);
+    for (const m of (txt || "").matchAll(/^([A-Z0-9]{3})\s*=\s*\{/gm)) tags.add(m[1]);
+  }
+  const fr = new FlagRenderer(fs);
+  await fr.init();
+  // Starting countries, plus every tag-style coat of arms: formable and
+  // releasable nations (Spain, ...) aren't in the setup files.
+  for (const k of fr.defs.keys()) if (/^[A-Z][A-Z0-9_]{1,9}$/.test(k)) tags.add(k);
+  const list = [...tags].filter((t) => fr.defs.has(t)).sort();
+  const flags = {};
+  let i = 0;
+  for (const tag of list) {
+    if (++i % 25 === 0) { stage(`Drawing flags… ${i} of ${list.length}`); progress(0.8 * i / list.length); }
+    try {
+      const c = await fr.render(tag);
+      if (c) flags[tag] = await (await c.convertToBlob({ type: "image/png" })).arrayBuffer();
+    } catch (e) { /* skip a flag the renderer can't draw */ }
+  }
+  stage("Reading the map data…");
+  progress(0.85);
+  const src = await mapSourceFromGame(fs);
+  if (!src) throw new UserError("That folder has no map data (in_game/map_data).");
+  const map = src.toJSON();
+  const png = await src.locFile.arrayBuffer();
+  log(`pack: ${Object.keys(flags).length} flags of ${tags.size} country tags, ${map.locations.length - 1} locations, ${Object.keys(map.tags).length} tag colours`);
+  return { flags, map, png };
+}
+
+async function buildMapData(data, sections, save, msrc) {
+  const t0 = performance.now();
+  if (!msrc) {
+    log("map: no map data available - skipping");
     return null;
   }
   if (!sections.has("locations")) {
@@ -943,11 +1079,7 @@ async function buildMapData(data, sections, save, fs) {
     log("map: this browser is missing DecompressionStream/OffscreenCanvas - skipping");
     return null;
   }
-
-  const idToName = await mapLocationNames(fs, mapd);
-  const nameToRgb = await mapLocationColors(fs, mapd);
-  const { colornames: tagToColorname, color2: tagColor2 } = await mapTagSetup(fs, setupd);
-  const namedColors = await loadNamedColors(fs);
+  const locFile = msrc.locFile;
 
   const rows = data.rows;
   const cidToTag = new Map(rows.map((r) => [r.id, r.tag]));
@@ -955,8 +1087,7 @@ async function buildMapData(data, sections, save, fs) {
   for (const r of rows) {
     // The game's setup colour, else the colour the save itself records
     // (covers tags formed or released mid-game).
-    const cn = tagToColorname.get(r.tag);
-    let rgb = cn ? namedColors.get("map_" + cn) || null : null;
+    let rgb = msrc.tagRgb(r.tag);
     if (!rgb && r.color) rgb = [1, 3, 5].map((i) => parseInt(r.color.slice(i, i + 2), 16));
     tagRgb.set(r.tag, rgb);
   }
@@ -978,14 +1109,7 @@ async function buildMapData(data, sections, save, fs) {
   // background (water / unclassified).
   const WHITE = [255, 255, 255];
   const state = new Map();
-  const topo = await fs.text(mapd + "/location_templates.txt");
-  if (topo != null) {
-    for (const m of topo.matchAll(/(\S+)\s*=\s*\{[^}]*?topography\s*=\s*(\w+)/g)) {
-      if (MAP_WATER_TOPO.has(m[2])) continue;
-      const rgb = nameToRgb.get(m[1]);
-      if (rgb) state.set(rgbKey(rgb), [MAP_LAND, false, WHITE]);
-    }
-  }
+  for (const k of msrc.land) state.set(k, [MAP_LAND, false, WHITE]);
   const at = (k) => state.get(k) || [MAP_BG, false, WHITE];
 
   let nOver = 0;
@@ -993,8 +1117,7 @@ async function buildMapData(data, sections, save, fs) {
     const tag = cidToTag.get(cid);
     const rgb = tag ? tagRgb.get(tag) : null;
     if (!rgb) continue;
-    const name = idToName.get(lid);
-    const src = name ? nameToRgb.get(name) : null;
+    const src = msrc.locRgb(lid);
     if (!src) continue;
     const k = rgbKey(src);
     const s = at(k);
@@ -1013,15 +1136,14 @@ async function buildMapData(data, sections, save, fs) {
     const [ovTag, isPu] = ov;
     const rgb = tagRgb.get(ovTag);
     if (!rgb) continue;
-    const name = idToName.get(lid);
-    const src = name ? nameToRgb.get(name) : null;
+    const src = msrc.locRgb(lid);
     if (!src) continue;
     const k = rgbKey(src);
     const s = at(k);
     let sec = s[2];
     if (isPu) {
       const ownTag = allCidToTag.get(cid);
-      const ownC2 = ownTag ? tagColor2.get(ownTag) : null;
+      const ownC2 = ownTag ? msrc.tagColor2(ownTag) : null;
       if (ownC2) {
         sec = ownC2;
         nPuSecondary++;
@@ -1702,6 +1824,14 @@ self.onmessage = async (e) => {
   const { save, game, opts } = e.data;
   const t0 = performance.now();
   try {
+    if (opts.buildPack) {
+      const fs = await resolveGame(game);
+      if (!fs) throw new UserError("That folder doesn't look like an EU5 install.");
+      const pack = await buildPack(fs);
+      progress(1);
+      postMessage({ type: "done", data: pack }, [pack.png, ...Object.values(pack.flags)]);
+      return;
+    }
     stage("Checking the save…");
     await checkPlaintext(save);
     if (opts.peek) {
@@ -1725,19 +1855,36 @@ self.onmessage = async (e) => {
 
     const fs = await resolveGame(game);
     attachAdvanceGains(data.rows, (fs && (await loadStartingAdvances(fs))) || STARTING_ADVANCES);
-    if (game && !fs) log("the linked folder doesn't look like an EU5 install - skipping flags and map");
-    if (opts.flags && fs) {
-      stage("Drawing coats of arms…");
-      await attachFlags(data.rows, fs);
-    } else if (opts.flags) {
-      log("flags: no EU5 install linked - skipping");
+    if (game && !fs) log("the linked folder doesn't look like an EU5 install - using the hosted game data instead");
+    // Flags and map come from the linked install when there is one, else from
+    // the hosted game-data pack for the save's version (or the newest pack).
+    const pack = !fs && (opts.flags || opts.map) ? await choosePack(w.version) : null;
+    if (pack) {
+      log(`using ${pack.label}` + (pack.exact ? "" : ` (no pack for ${w.version})`));
+      w.game_data = { source: "pack", version: pack.version, name: pack.name || null,
+        build: pack.steam_build || null, matches: pack.exact };
+    } else if (fs) {
+      w.game_data = { source: "install", label: fs.label };
     }
-    if (opts.map && fs) {
+    if (opts.flags && (fs || pack)) {
+      stage("Drawing coats of arms…");
+      if (fs) await attachFlags(data.rows, fs);
+      else await attachFlagsFromPack(data.rows, pack);
+    } else if (opts.flags) {
+      log("flags: no game data available - skipping");
+    }
+    if (opts.map && (fs || pack)) {
       stage("Painting the map…");
       progress(0.75);
-      data.map = await buildMapData(data, sections, save, fs);
+      let msrc = null;
+      try {
+        msrc = fs ? await mapSourceFromGame(fs) : await mapSourceFromPack(pack);
+      } catch (err) {
+        log("map: couldn't load the map data - " + err.message);
+      }
+      data.map = await buildMapData(data, sections, save, msrc);
     } else if (opts.map) {
-      log("map: no EU5 install linked - skipping");
+      log("map: no game data available - skipping");
     }
     log(`done in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
     progress(1);

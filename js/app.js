@@ -128,6 +128,13 @@ function sanitizeData(d) {
     multiplayer: w.multiplayer === true, you: w.you == null ? null : str(w.you),
     n_players: numOr0(w.n_players), wars_live: numOr0(w.wars_live), save: str(w.save),
     playthrough: w.playthrough == null ? null : str(w.playthrough),
+    game_data: w.game_data && typeof w.game_data === "object" ? {
+      source: w.game_data.source === "pack" ? "pack" : "install",
+      version: /^[\d.]{1,20}$/.test(str(w.game_data.version)) ? str(w.game_data.version) : null,
+      name: w.game_data.name == null ? null : str(w.game_data.name).slice(0, 40),
+      build: Number(w.game_data.build) || null, matches: w.game_data.matches !== false,
+      label: w.game_data.label == null ? null : str(w.game_data.label).slice(0, 80),
+    } : null,
   };
   let map;
   if (d.map && typeof d.map === "object" && isPng(d.map.image)) {
@@ -786,9 +793,13 @@ async function buildMany(items) {
     // 4. Assemble: the newest save's report, plus every snapshot.
     const snaps = kept.map((c) => (c.full ? toSnap(c.full) : c.snap));
     const report = { ...newest.full, timeline: { snapshots: snaps } };
-    if (!game && (opts.flags || opts.map) && newest.file)
-      notes.push("Link your EU5 install (step 2) to add coats of arms and the political map.");
-    else if (opts.map && newest.file && !newest.full.map && !reduced)
+    const gd = newest.full.world && newest.full.world.game_data;
+    if (!game && (opts.flags || opts.map) && newest.file && !gd)
+      notes.push("The built-in game data couldn't be loaded, so there are no flags or map — link your EU5 install (step 2) instead.");
+    else if (gd && gd.source === "pack" && !gd.matches && newest.file)
+      notes.push(`Flags and map use EU5 ${gd.version} game data, but this save is from ${newest.full.world.version}. ` +
+        "Link your own install (step 2) if anything looks off.");
+    if (opts.map && newest.file && gd && !newest.full.map && !reduced)
       notes.push("The map couldn't be drawn — open Details above for the reason.");
     if (dupes.length)
       notes.push(`Skipped ${dupes.join(", ")} — another save has the same in-game date.`);
@@ -1213,6 +1224,14 @@ function init() {
   }
   restoreGame();
   loadTemplate().catch(() => {});
+  // name the built-in game data versions on the page
+  fetch("gamedata/index.json").then((r) => (r.ok ? r.json() : null)).then((ix) => {
+    const packs = ((ix && ix.packs) || []).map((p) => p.version).sort((a, b) =>
+      b.split(".").map(Number).reduce((d, x, i) => d || x - (Number(a.split(".")[i]) || 0), 0));
+    if (!packs.length) return;
+    $("packver").textContent = packs[0];
+    $("packlist").textContent = packs.map((v) => "EU V " + v).join(", ");
+  }).catch(() => {});
 }
 
 init();

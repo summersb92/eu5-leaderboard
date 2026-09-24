@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build a game-data pack</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>
+  .wrap{padding-block:40px}
+  label.f{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--ink-2)}
+  label.f input{font:14px "IBM Plex Mono",monospace; padding:7px 9px; border:1px solid var(--line); border-radius:4px;
+    background:var(--raised); color:var(--ink)}
+  .fields{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:16px 0}
+  #log{white-space:pre-wrap; font:12px "IBM Plex Mono",monospace; color:var(--ink-2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>Build a game-data pack</h2>
+  <p class="note">Maintainer tool. After a game patch, point it at the EU&nbsp;V install to pre-render every
+    nation's flag and export the map data, then unzip the result into the repository root and commit it.
+    Reports use the pack matching a save's version, or the newest pack.</p>
+  <div class="fields">
+    <label class="f">Game version (as saves record it) <input id="ver" placeholder="1.3.11"></label>
+    <label class="f">Version name <input id="name" placeholder="Pavia"></label>
+    <label class="f">Steam build id <input id="build" placeholder="24187685"></label>
+  </div>
+  <p class="hint">The version and name show in-game and in the executable; the Steam build id is in
+    <code>steamapps/appmanifest_3450310.acf</code>.</p>
+  <div class="gamerow" style="margin-top:14px">
+    <button class="btn primary" id="pick" type="button">Choose the game folder</button>
+    <span class="gamestatus" id="status">or drag the Europa Universalis V folder here</span>
+  </div>
+  <input type="file" id="dir" webkitdirectory directory multiple hidden>
+  <div class="gamerow" style="margin-top:14px">
+    <button class="btn primary" id="go" type="button" disabled>Build the pack</button>
+  </div>
+  <progress class="bar" id="bar" max="1" value="0" hidden></progress>
+  <pre id="log"></pre>
+</div>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const NEEDED = ["main_menu/common/named_colors/", "main_menu/common/coat_of_arms/coat_of_arms/",
+  "main_menu/gfx/coat_of_arms/", "in_game/map_data/", "in_game/setup/countries/"];
+let files = null;
+const log = (m) => { $("log").textContent += m + "\n"; };
+
+function useList(list) {
+  let prefix = null;
+  for (const f of list) {
+    const p = f.webkitRelativePath || f.rel || "";
+    const at = p.indexOf("main_menu/common/coat_of_arms/");
+    if (at >= 0) { prefix = p.slice(0, at); break; }
+  }
+  if (prefix === null) { $("status").textContent = "That folder doesn't contain the game's files."; return; }
+  files = new Map();
+  for (const f of list) {
+    const p = f.webkitRelativePath || f.rel;
+    if (!p.startsWith(prefix)) continue;
+    const rel = p.slice(prefix.length);
+    if (NEEDED.some((n) => rel.startsWith(n))) files.set(rel, f);
+  }
+  $("status").textContent = `Linked: ${files.size} game files`;
+  $("go").disabled = false;
+}
+async function readDrop(entry, rel, out) {
+  if (entry.isFile) { const f = await new Promise((ok, no) => entry.file(ok, no)); f.rel = rel + entry.name; out.push(f); return; }
+  const reader = entry.createReader();
+  for (;;) {
+    const batch = await new Promise((ok, no) => reader.readEntries(ok, no));
+    if (!batch.length) return;
+    for (const e of batch) await readDrop(e, rel + entry.name + "/", out);
+  }
+}
+$("pick").onclick = () => $("dir").click();
+$("dir").onchange = (e) => useList([...e.target.files]);
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  const entry = e.dataTransfer.items[0] && e.dataTransfer.items[0].webkitGetAsEntry();
+  if (!entry || !entry.isDirectory) return;
+  $("status").textContent = "Reading the folder…";
+  const out = [];
+  await readDrop(entry, "", out);
+  useList(out);
+});
+
+/* uncompressed zip of [{name, data: Uint8Array}] */
+function zip(entries) {
+  const enc = new TextEncoder(), parts = [], central = [];
+  const crcT = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; crcT[n] = c >>> 0; }
+  const crc32 = (u8) => { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = crcT[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  let off = 0;
+  for (const f of entries) {
+    const name = enc.encode(f.name), data = f.data, crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(12, 0x21, true);
+    h.setUint32(14, crc, true); h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true);
+    parts.push(new Uint8Array(h.buffer), name, data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(14, 0x21, true);
+    c.setUint32(16, crc, true); c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+    central.push(new Uint8Array(c.buffer), name);
+    off += 30 + name.length + data.length;
+  }
+  const size = central.reduce((a, b) => a + b.length, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, entries.length, true); e.setUint16(10, entries.length, true);
+  e.setUint32(12, size, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...central, new Uint8Array(e.buffer)], { type: "application/zip" });
+}
+
+async function build() {
+  const version = $("ver").value.trim();
+  if (!/^\d+(\.\d+){1,3}$/.test(version)) { log("Enter the game version, e.g. 1.3.11."); return; }
+  if (!files) return;
+  $("go").disabled = true; $("bar").hidden = false; $("log").textContent = "";
+  const w = new Worker("../js/worker.js");
+  const pack = await new Promise((resolve, reject) => {
+    w.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "fs") {
+        let result = null;
+        if (m.op === "file") result = files.get(m.rel) || null;
+        else {
+          const pre = m.rel.replace(/\/?$/, "/"), out = []; let found = false;
+          for (const k of files.keys()) if (k.startsWith(pre)) { found = true; const rest = k.slice(pre.length); if (!rest.includes("/")) out.push(rest); }
+          result = found ? out : null;
+        }
+        w.postMessage({ type: "fs", id: m.id, result });
+      } else if (m.type === "log") log(m.msg);
+      else if (m.type === "stage") $("status").textContent = m.msg;
+      else if (m.type === "progress") $("bar").value = m.value;
+      else if (m.type === "done") resolve(m.data);
+      else if (m.type === "error") reject(new Error(m.message));
+    };
+    w.onerror = (e) => reject(new Error(e.message || "worker failed"));
+    w.postMessage({ save: null, game: { label: "EU5 install" }, opts: { buildPack: true } });
+  }).finally(() => w.terminate());
+
+  const enc = new TextEncoder(), dir = "gamedata/" + version + "/";
+  const meta = {
+    version, name: $("name").value.trim() || null, steam_build: Number($("build").value.trim()) || null,
+    built: new Date().toISOString().slice(0, 10), flags: Object.keys(pack.flags).length,
+  };
+  const entries = [
+    { name: dir + "pack.json", data: enc.encode(JSON.stringify(meta, null, 1)) },
+    { name: dir + "map.json", data: enc.encode(JSON.stringify(pack.map)) },
+    { name: dir + "locations.png", data: new Uint8Array(pack.png) },
+    ...Object.entries(pack.flags).map(([tag, buf]) => ({ name: dir + "flags/tag-" + tag + ".png", data: new Uint8Array(buf) })),
+  ];
+  // the index lists every pack; add or replace this one
+  let index = { packs: [] };
+  try { const r = await fetch("../gamedata/index.json", { cache: "no-store" }); if (r.ok) index = await r.json(); } catch (e) {}
+  index.packs = (index.packs || []).filter((p) => p.version !== version).concat([meta]);
+  entries.push({ name: "gamedata/index.json", data: enc.encode(JSON.stringify(index, null, 1)) });
+  const blob = zip(entries);
+  window.__packZip = blob;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `eu5-gamedata-${version}.zip`;
+  document.body.appendChild(a); a.click(); a.remove();
+  log(`\nDone: eu5-gamedata-${version}.zip (${(blob.size / 1e6).toFixed(1)} MB). Unzip it into the repository root and commit.`);
+  $("status").textContent = "Pack built";
+  $("go").disabled = false;
+}
+$("go").onclick = () => build().catch((e) => { log("Failed: " + e.message); $("go").disabled = false; });
+</script>
+</body>
+</html>

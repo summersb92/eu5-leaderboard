@@ -46,9 +46,10 @@
 
       <div class="step" id="step-game">
         <div class="stephead"><span class="stepno">2</span><h2>Your EU&nbsp;V install</h2><span class="opt">optional</span></div>
-        <p class="note">Coats of arms and the map are drawn from the game's own files. <strong>Drag your
-          <code>Europa Universalis V</code> folder from File Explorer onto this box</strong> &mdash; it's only read
-          here, never copied or sent anywhere.</p>
+        <p class="note">Coats of arms and the map are <strong>built in</strong>, from EU&nbsp;V <span id="packver">1.3.11</span>
+          game data, so a save is all you need. Link your own install only if you're on a different game version
+          or playing with mods: drag your <code>Europa Universalis V</code> folder from File Explorer onto this box.
+          It's only read here, never copied or sent anywhere.</p>
         <div class="gamerow">
           <button class="btn primary" id="gamebtn" type="button">Choose game folder</button>
           <span class="gamestatus" id="gamestatus">Not linked</span>
@@ -157,7 +158,11 @@
       <details><summary>Is my save uploaded anywhere?</summary>
         <p>No. This is a static page; the save is read by your own browser, in a background thread, and
           the report is built on your machine. Close the tab and it's gone. The only network requests are
-          for this page itself and its fonts.</p></details>
+          for this page, its fonts, and the built-in flag and map data it downloads from this site.</p></details>
+      <details><summary>Which game version are the flags and map from?</summary>
+        <p>The built-in data comes from the game version each save records, when there's a pack for it, and
+          otherwise from the newest one &mdash; currently <span id="packlist">EU&nbsp;V 1.3.11</span>. Every report says
+          which version it used, next to the save's own version. Linking your install uses your files instead.</p></details>
       <details><summary>Which browsers work?</summary>
         <p>Any current Chrome, Edge, Firefox or Safari. Chrome and Edge remember a game folder chosen with
           the button (next visit it links itself, or needs one &ldquo;Reconnect&rdquo; click). A dragged folder,
@@ -199,7 +204,9 @@
           A readable save's first bytes are <code>SAV0200</code>; a packed one starts <code>SAV0203</code>.</p></details>
     </div>
   </section>
-  <footer><span>Not affiliated with Paradox Interactive. Game files stay on your computer and are never redistributed.</span></footer>
+  <footer><span>A non-commercial fan tool, not affiliated with Paradox Interactive. Coats of arms and map
+    images are from Europa Universalis V &copy; Paradox Interactive, used for non-commercial purposes. Your saves
+    and any linked game folder stay on your computer.</span></footer>
 </div>
 
 <script src="js/app.js"></script>

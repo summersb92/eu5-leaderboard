@@ -315,8 +315,16 @@ const PRETTY={goods_gold:"gold",fiber_crops:"fibre crops",wild_game:"wild game",
 const pretty=g=>PRETTY[g]||g.replace(/_/g," ");
 const nPlayers=R.filter(r=>r.is_player).length;
 
-$("eyebrow").innerHTML='<span>Europa Universalis V'+(W.multiplayer?" &middot; multiplayer":" &middot; single player")+'</span><span><b>'+esc(W.date)+'</b></span><span>patch '+esc(W.version)+'</span>';
-$("src").innerHTML='Read from <span class="mono">'+esc(W.save)+'</span> &middot; debug-mode plaintext save';
+$("eyebrow").innerHTML='<span>Europa Universalis V'+(W.multiplayer?" &middot; multiplayer":" &middot; single player")+'</span><span><b>'+esc(W.date)+'</b></span><span>patch '+esc(W.version)+'</span>'
+  +(W.game_data&&W.game_data.source==="pack"?'<span title="Flags and map">game data '+esc(W.game_data.version)+(W.game_data.matches?'':' &#9888;')+'</span>':'');
+const GD=W.game_data;
+const gdText=!GD?"no game data (no flags or map)"
+  :GD.source==="pack"?"EU5 "+esc(GD.version)+(GD.name?" &ldquo;"+esc(GD.name)+"&rdquo;":"")+" game data"+(GD.build?" (Steam build "+esc(GD.build)+")":"")
+  :"the viewer&rsquo;s own EU5 install";
+$("src").innerHTML='Read from <span class="mono">'+esc(W.save)+'</span> &middot; saved in EU5 '+esc(W.version)
+  +' &middot; flags &amp; map: '+gdText
+  +(GD&&GD.source==="pack"&&!GD.matches?' <span class="warnv">(different version from the save)</span>':'')
+  +'<br><span style="font-size:11.5px">Coats of arms and map &copy; Paradox Interactive; non-commercial fan use.</span>';
 $("stamp").textContent="In-game date "+W.date+" · "+R.length+" nations shown";
 $("goodsnote").textContent="Raw materials by number of locations producing them, counted from every location each nation owns. The shading runs with the count.";
 $("warnote").innerHTML='EU&nbsp;V keeps a running count of men a country has killed in battle — the save\'s <code>land_units_killed</code> — but it does <em>not</em> keep a lifetime tally of men lost. Losses survive only for wars still in progress when the save was written ('+W.wars_live+' of them here), so a nation at peace shows none. The two loss columns below count those live wars only.';
