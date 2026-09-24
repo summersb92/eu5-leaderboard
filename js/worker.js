@@ -962,7 +962,9 @@ async function mapSourceFromGame(fs) {
         const a = tagRgb(t), b = color2.get(t);
         if (a || b) tags[t] = [a ? rgbKey(a) : null, b ? rgbKey(b) : null];
       }
-      return { locations, land: [...land].sort((x, y) => x - y), tags };
+      const names = new Array(maxId + 1).fill("");
+      for (const [lid, name] of idToName) names[lid] = name;
+      return { locations, land: [...land].sort((x, y) => x - y), tags, names };
     },
   };
 }
@@ -972,6 +974,7 @@ async function mapSourceFromPack(pack) {
   const [meta, locFile] = await Promise.all([packFetch(pack, "map.json", "json"), packFetch(pack, "locations.png", "blob")]);
   return {
     label: pack.label, locFile, land: new Set(meta.land),
+    liveBase: new URL(pack.version + "/", PACK_ROOT).href,
     locRgb: (lid) => (meta.locations[lid] ? unKey(meta.locations[lid]) : null),
     tagRgb: (tag) => (meta.tags[tag] && meta.tags[tag][0] != null ? unKey(meta.tags[tag][0]) : null),
     tagColor2: (tag) => (meta.tags[tag] && meta.tags[tag][1] != null ? unKey(meta.tags[tag][1]) : null),
@@ -1061,8 +1064,26 @@ async function buildPack(fs) {
   if (!src) throw new UserError("That folder has no map data (in_game/map_data).");
   const map = src.toJSON();
   const png = await src.locFile.arrayBuffer();
+  // Half-resolution location-id map for the interactive map: each pixel's
+  // green and blue hold its location id (nearest-neighbour downsample).
+  stage("Building the interactive map raster…");
+  progress(0.9);
+  const lidOf = new Uint16Array(1 << 24);
+  map.locations.forEach((k, lid) => { if (k) lidOf[k] = lid; });
+  let raster = null, RW = 0;
+  await decodePNGRows(src.locFile, (y, row, ch) => {
+    if (y & 1) return;
+    const out = raster, base = (y >> 1) * RW * 4;
+    for (let x = 0, q = 0; x < RW; x++, q += 2 * ch) {
+      const lid = lidOf[(row[q] << 16) | (row[q + 1] << 8) | row[q + 2]];
+      out[base + x * 4 + 1] = lid >> 8; out[base + x * 4 + 2] = lid & 255; out[base + x * 4 + 3] = 255;
+    }
+  }, (w, h) => { RW = w >> 1; raster = new Uint8ClampedArray(RW * (h >> 1) * 4); });
+  const rc = new OffscreenCanvas(RW, raster.length / 4 / RW);
+  rc.getContext("2d").putImageData(new ImageData(raster, RW, rc.height), 0, 0);
+  const rasterPng = await (await rc.convertToBlob({ type: "image/png" })).arrayBuffer();
   log(`pack: ${Object.keys(flags).length} flags of ${tags.size} country tags, ${map.locations.length - 1} locations, ${Object.keys(map.tags).length} tag colours`);
-  return { flags, map, png };
+  return { flags, map, png, raster: rasterPng };
 }
 
 async function buildMapData(data, sections, save, msrc) {
@@ -1291,7 +1312,22 @@ async function buildMapData(data, sections, save, msrc) {
   log(`map: rendered ${tw}x${th}, ${legend.length}/${rows.length} nations placed, ` +
       `${nSubj} subject locations hatched (${nPuSecondary} with a personal-union ` +
       `secondary color) (${((performance.now() - t0) / 1000).toFixed(1)}s)`);
-  return { image: uri, legend, has_subjects: nSubj > 0, bg: hex(MAP_BG), land: hex(MAP_LAND) };
+  // For the interactive map: players' colours and their subjects, keyed by
+  // the owner indexes in data.locmap, and the area the static map shows.
+  let live = null;
+  const oIdx = data.locmap && data.locmap.ownerIdx;
+  if (oIdx && msrc.liveBase) {
+    const tagCid = new Map([...cidToTag].map(([c, t]) => [t, c]));
+    const pcol = {}, subj = {};
+    for (const r of rows) { const rgb = tagRgb.get(r.tag); if (rgb && oIdx.has(r.id)) pcol[oIdx.get(r.id)] = hex(rgb); }
+    for (const [cid, [rootTag, isPu]] of subjectOverlord) {
+      if (!oIdx.has(cid) || !oIdx.has(tagCid.get(rootTag))) continue;
+      const own = allCidToTag.get(cid), c2 = isPu && own ? msrc.tagColor2(own) : null;
+      subj[oIdx.get(cid)] = [oIdx.get(tagCid.get(rootTag)), c2 ? hex(c2) : "#ffffff"];
+    }
+    live = { base: msrc.liveBase, view: [x0 / fullW, y0 / fullH, x1 / fullW, y1 / fullH], pcol, subj };
+  }
+  return { image: uri, legend, has_subjects: nSubj > 0, bg: hex(MAP_BG), land: hex(MAP_LAND), live };
 }
 
 // ==========================================================================
@@ -1513,6 +1549,7 @@ async function extract(save, sections, topAi = 0) {
   // Levies each pop type in a location can supply (thousands) - the
   // nearest thing the save has to a country's potential levies.
   const levyPot = new Counter();
+  const locRecs = [];
   if (sections.has("locations")) {
     let ltext = await readSpan(save, ...sections.get("locations")[0]);
     for (const part of ltext.split(/\n\t\t(?=\d+=\{)/)) {
@@ -1537,8 +1574,37 @@ async function extract(save, sections, topAi = 0) {
         if (dv) ctlWsum.add(cid, parseFloat(ct[1]) * parseFloat(dv[1]));
       }
       for (const lv of part.matchAll(/\n\t\t\t\t\t\tlevies=([\d.]+)/g)) levyPot.add(cid, parseFloat(lv[1]));
+      // per-location detail for the interactive map
+      const lid = part.match(/^(\d+)=\{/);
+      if (lid) {
+        const f = (re) => { const m = part.match(re); return m ? parseFloat(m[1]) : 0; };
+        const pp = part.match(/\n\t\t\t\tpops=\{([^}]*)\}/);
+        locRecs.push({
+          lid: +lid[1], owner: cid,
+          ctrl: (part.match(/\n\t\t\tcontroller=(\d+)/) || [0, cid])[1],
+          rank: (part.match(/\n\t\t\trank=(\w+)/) || [0, ""])[1],
+          raw: g ? g[1] : "",
+          dev: dv ? parseFloat(dv[1]) : 0, control: ct ? parseFloat(ct[1]) : 0,
+          tax: tx ? parseFloat(tx[1]) : 0, ptax: pt ? parseFloat(pt[1]) : 0,
+          prosp: f(/\n\t\t\tprosperity=([\d.]+)/),
+          pops: pp ? pp[1].trim().split(/\s+/) : [],
+        });
+      }
     }
     ltext = null;
+  }
+  // location populations: the sum of their pops' sizes (thousands)
+  if (locRecs.length && sections.has("population")) {
+    stage("Counting people…");
+    const size = new Map();
+    const ptext = await readSpan(save, ...sections.get("population")[0]);
+    for (const m of ptext.matchAll(/\n(\d+)=\{\n\ttype=\w+[^}]*?\n\tsize=([\d.]+)/g)) size.set(m[1], parseFloat(m[2]));
+    for (const l of locRecs) {
+      let s = 0;
+      for (const id of l.pops) s += size.get(id) || 0;
+      l.pop = s;
+      delete l.pops;
+    }
   }
 
   // ---- subunits: standing army / navy ----------------------------------
@@ -1790,6 +1856,25 @@ async function extract(save, sections, topAi = 0) {
     });
   }
   rows.sort((a, b) => a.gp_rank - b.gp_rank);
+
+  // Every owned location, compactly, for the interactive map: owners (and
+  // occupiers) are indexes into `owners`, ranks and raw materials into
+  // their own lists. Numbers are rounded to keep the report small.
+  const ownerIdx = new Map(), owners = [], ranksL = [], rawsL = [];
+  const oi = (cid) => {
+    if (!ownerIdx.has(cid)) {
+      const c = countries.get(cid), tag = tags.get(cid) || "?";
+      ownerIdx.set(cid, owners.length);
+      owners.push([cid, tag, NAMES[tag] || tag, (c && c.get("color")) || null, players.has(cid) ? players.get(cid) : null]);
+    }
+    return ownerIdx.get(cid);
+  };
+  const li = (list, v) => { let i = list.indexOf(v); if (i < 0) { i = list.length; list.push(v); } return i; };
+  const r1 = (v) => Math.round(v * 10) / 10, r3 = (v) => Math.round(v * 1000) / 1000;
+  const locs = locRecs.map((l) => [l.lid, oi(l.owner), l.ctrl === l.owner ? -1 : oi(l.ctrl), li(ranksL, l.rank),
+    li(rawsL, l.raw), r1(l.dev), r3(l.control), r3(l.tax), r3(l.ptax), r3(l.prosp), r3(l.pop || 0)]);
+  const locmap = { owners, ranks: ranksL, raws: rawsL, locs };
+  Object.defineProperty(locmap, "ownerIdx", { value: ownerIdx, enumerable: false });
   await attachRulerTraits(rows, save, sections);
 
   let worldPop = 0;
@@ -1802,7 +1887,7 @@ async function extract(save, sections, topAi = 0) {
     n_players: players.size, wars_live: nWars,
     save: save.name,
   };
-  return { rows, world };
+  return { rows, world, locmap };
 }
 
 // ==========================================================================
@@ -1829,7 +1914,7 @@ self.onmessage = async (e) => {
       if (!fs) throw new UserError("That folder doesn't look like an EU5 install.");
       const pack = await buildPack(fs);
       progress(1);
-      postMessage({ type: "done", data: pack }, [pack.png, ...Object.values(pack.flags)]);
+      postMessage({ type: "done", data: pack }, [pack.png, pack.raster, ...Object.values(pack.flags)]);
       return;
     }
     stage("Checking the save…");

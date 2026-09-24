@@ -13,14 +13,12 @@ are never uploaded and the site needs no server.
 2. Open the page and drop the `.eu5` file on it. In Chrome and Edge, saves
    you pick or drop appear under **Recent saves** for one-click rebuilds on
    later visits (the browser keeps a file handle, not the file or a path).
-3. Coats of arms and the political map are built in, from a hosted
-   game-data pack (see below), so a save is all anyone needs. *(Optional)*
-   Link your own `Europa Universalis V` install instead - for a game version
-   without a pack, or mods. **Choose game folder** uses Chrome/Edge's folder
-   picker (remembered for later visits); it refuses anything under
-   `Program Files` (the Steam default), so either drag the folder onto the
-   page or give it a junction outside `Program Files` (the page shows the
-   command). Firefox and Safari use a plain folder input.
+3. Coats of arms and the map are built in, from a hosted game-data pack
+   (see below), so a save is all anyone needs. The report's map is
+   interactive: the whole world, scroll or pinch to zoom, drag to move,
+   hover or tap any location for its owner, population, development,
+   control and tax, and map modes for players, all nations, development,
+   population, control, tax and prosperity.
 4. *(Optional)* Compare saves over time: give it two or more saves from
    the same campaign (pick or drop them together, tick them under **Recent
    saves**, or use **Add a save to compare** on a built report). The newest
@@ -65,12 +63,15 @@ per viewer) and fall back to the raw gist file.
 to link an install: `flags/tag-<TAG>.png` (every country's coat of arms,
 pre-rendered with the page's own renderer; the `tag-` prefix keeps names
 like `AUX` and `CON` legal on Windows), `locations.png` (the game's own map
-image), `map.json` (each location's colour and land/water, each tag's map
-and secondary colours) and `pack.json` (game version, version name, Steam
+image), `locations_half.png` (a half-resolution copy whose pixels hold
+location ids, for the interactive map), `map.json` (each location's colour,
+name and land/water, each tag's map and secondary colours) and `pack.json` (game version, version name, Steam
 build). `gamedata/index.json` lists the packs. A report uses the pack for
 the version its save records, else the newest, and says which it used.
 
 Current pack: **EU5 1.3.11 "Pavia"**, Steam build 24187685, 1,937 flags.
+The page doesn't link a game folder any more; the worker still can, and the
+pack builder uses that.
 
 After a game patch, open `tools/build-pack.html` (served over HTTP), point it
 at the install, enter the version, name and Steam build id (from

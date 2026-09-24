@@ -1,5 +1,5 @@
-/* EU5 leaderboard - page controller. Picks the save and (optionally) the
-   game folder, runs js/worker.js, and turns its data into the report. */
+/* EU5 leaderboard - page controller. Picks the saves, runs js/worker.js,
+   and turns its data into the report. */
 "use strict";
 
 const $ = (id) => document.getElementById(id);
@@ -147,8 +147,32 @@ function sanitizeData(d) {
       })),
       has_subjects: d.map.has_subjects === true, bg: hexc(d.map.bg), land: hexc(d.map.land),
     };
+    // the interactive map: where its hosted data lives, and the players' colours
+    const lv = d.map.live;
+    if (lv && typeof lv === "object" && typeof lv.base === "string" &&
+        /^https?:\/\/[^\s"'<>\\]+\/gamedata\/[\w.]+\/$/.test(lv.base)) {
+      const idx = (k) => /^\d{1,6}$/.test(k);
+      const pcol = {}, subj = {};
+      for (const [k, v] of Object.entries(lv.pcol || {})) if (idx(k)) pcol[k] = hexc(v);
+      for (const [k, v] of Object.entries(lv.subj || {}))
+        if (idx(k) && Array.isArray(v)) subj[k] = [Math.trunc(numOr0(v[0])), hexc(v[1])];
+      const view = Array.isArray(lv.view) && lv.view.length === 4 ? lv.view.map((x) => Math.min(1, Math.max(0, numOr0(x)))) : [0, 0, 1, 1];
+      map.live = { base: lv.base, view, pcol, subj };
+    }
   }
   const out = map ? { rows, world, map } : { rows, world };
+  // every owned location, for the interactive map
+  const lm = d.locmap;
+  if (lm && typeof lm === "object" && Array.isArray(lm.locs) && Array.isArray(lm.owners)) {
+    const word = (v) => (/^\w{0,60}$/.test(str(v)) ? str(v) : "");
+    out.locmap = {
+      owners: lm.owners.filter(Array.isArray).map((o) => [str(o[0]), str(o[1]).slice(0, 12), str(o[2]).slice(0, 60),
+        typeof o[3] === "string" && /^#[0-9a-fA-F]{6}$/.test(o[3]) ? o[3] : null, o[4] == null ? null : str(o[4]).slice(0, 60)]),
+      ranks: (Array.isArray(lm.ranks) ? lm.ranks : []).map(word),
+      raws: (Array.isArray(lm.raws) ? lm.raws : []).map(word),
+      locs: lm.locs.filter((l) => Array.isArray(l) && l.length >= 11).map((l) => l.slice(0, 11).map(numOr0)),
+    };
+  }
   // Earlier saves of the same campaign, for the "Over time" section.
   const tl = d.timeline && Array.isArray(d.timeline.snapshots) ? d.timeline.snapshots : [];
   const snaps = tl.filter((s) => s && typeof s === "object").map((s) => ({
@@ -163,20 +187,12 @@ function sanitizeData(d) {
 }
 
 // ==========================================================================
-// Game folder linking
+// Game data
 // ==========================================================================
-// Pages never learn real file paths, so what can be remembered is a folder
-// *handle* from Chrome/Edge's directory picker, kept in IndexedDB. That
-// picker refuses anything under Program Files (Steam's default), so the
-// folder can also be dragged in - which works there but can't be
-// remembered - or reached through a junction outside Program Files, which
-// can. Either way only the few files we need are read, locally.
-const NEEDED = ["main_menu/common/named_colors/", "main_menu/common/coat_of_arms/coat_of_arms/",
-  "main_menu/gfx/coat_of_arms/", "in_game/map_data/", "in_game/setup/countries/",
-  "in_game/common/advances/"];
-const canPickDir = typeof window.showDirectoryPicker === "function";
-let game = null; // {files: Map(relative path -> File), label}
-let savedHandle = null; // remembered folder still waiting for permission
+// Flags and the map come from the hosted game-data pack (gamedata/), so the
+// page never links a game folder. (The worker can still read an install;
+// tools/build-pack.html uses that to build packs.)
+const game = null;
 
 const idb = {
   open() {
@@ -201,186 +217,16 @@ const idb = {
   del(k) { return this.run("readwrite", (s) => s.delete(k)).catch(() => {}); },
 };
 
-function setGameStatus(text, ok, button) {
-  const s = $("gamestatus");
-  s.textContent = text;
-  s.classList.toggle("ok", !!ok);
-  $("gameforget").hidden = !(ok || savedHandle);
-  $("gamebtn").textContent = button || (ok ? "Change folder" : "Choose game folder");
-}
-
-/* Folder <input> fallback (browsers without the directory picker). Accepts
-   the install folder or its `game` folder - paths are anchored on the
-   main_menu/in_game layout. */
-function linkFileList(list) {
-  let prefix = null;
-  for (const f of list) {
-    const p = f.webkitRelativePath || "";
-    const at = p.indexOf("main_menu/common/coat_of_arms/");
-    if (at >= 0) { prefix = p.slice(0, at); break; }
-  }
-  if (prefix === null) {
-    setGameStatus("That folder doesn't contain the game's files — pick Europa Universalis V, or the game folder inside it.");
-    return;
-  }
-  const files = new Map();
-  for (const f of list) {
-    const p = f.webkitRelativePath;
-    if (!p.startsWith(prefix)) continue;
-    const rel = p.slice(prefix.length);
-    if (NEEDED.some((n) => rel.startsWith(n))) files.set(rel, f);
-  }
-  const label = prefix.split("/")[0];
-  game = { files, label };
-  setGameStatus(`Linked: ${label}`, true);
-  maybeRebuild();
-}
-
-/* One shape over the two folder APIs: a dropped FileSystemDirectoryEntry,
-   or a FileSystemDirectoryHandle from the picker / IndexedDB. */
-const entryCall = (fn) => new Promise((res, rej) => fn(res, rej));
-const folderApi = {
-  entry: {
-    async sub(dir, path) {
-      return entryCall((ok, no) => dir.getDirectory(path, {}, ok, no)).catch(() => null);
-    },
-    async list(dir) {
-      const reader = dir.createReader(), out = [];
-      for (;;) {
-        const batch = await entryCall((ok, no) => reader.readEntries(ok, no));
-        if (!batch.length) return out;
-        for (const e of batch) out.push({ name: e.name, dir: e.isDirectory, obj: e });
-      }
-    },
-    file: (e) => entryCall((ok, no) => e.file(ok, no)),
-  },
-  handle: {
-    async sub(dir, path) {
-      try {
-        for (const part of path.split("/")) dir = await dir.getDirectoryHandle(part);
-        return dir;
-      } catch (e) {
-        return null;
-      }
-    },
-    async list(dir) {
-      const out = [];
-      for await (const [name, h] of dir.entries()) out.push({ name, dir: h.kind === "directory", obj: h });
-      return out;
-    },
-    file: (h) => h.getFile(),
-  },
-};
-
-async function listTree(api, dir, rel, out, onCount) {
-  for (const e of await api.list(dir)) {
-    if (e.dir) await listTree(api, e.obj, rel + e.name + "/", out, onCount);
-    else out.push([rel + e.name, e.obj]);
-  }
-  onCount(out.length);
-}
-
-/* Returns true when linked. */
-async function linkFolder(api, top, name) {
-  setGameStatus(`Reading ${name}…`);
-  const bar = $("gamebar");
-  try {
-    let root = top;
-    if (!(await api.sub(root, "main_menu"))) root = await api.sub(top, "game");
-    if (!root || !(await api.sub(root, "main_menu/common/coat_of_arms"))) {
-      setGameStatus(`“${name}” doesn't contain the game's files — use Europa Universalis V, or the game folder inside it.`);
-      return false;
-    }
-    // List first (count unknown, so the bar is indeterminate), then open
-    // each file with a real count to show against.
-    setBar(bar, null);
-    const entries = [];
-    for (const n of NEEDED) {
-      const d = await api.sub(root, n.replace(/\/$/, ""));
-      if (d) await listTree(api, d, n, entries, (k) => setGameStatus(`Finding game files… ${k.toLocaleString()}`));
-    }
-    const files = new Map();
-    let i = 0;
-    for (const [rel, obj] of entries) {
-      files.set(rel, await api.file(obj));
-      if (++i % 50 === 0 || i === entries.length) {
-        setBar(bar, i / entries.length);
-        setGameStatus(`Reading game files… ${i.toLocaleString()} of ${entries.length.toLocaleString()}`);
-      }
-    }
-    bar.hidden = true;
-    game = { files, label: name };
-    return true;
-  } catch (err) {
-    bar.hidden = true;
-    setGameStatus(`Couldn't read “${name}”: ${err.message || err.name}. Try the folder link below.`);
-    return false;
-  }
-}
-
-async function linkDroppedFolder(entry) {
-  if (await linkFolder(folderApi.entry, entry, entry.name)) {
-    setGameStatus(`Linked: ${entry.name} (for this visit — dragged folders can't be remembered)`, true);
-    maybeRebuild();
-  }
-}
-
-async function linkHandle(h) {
-  if (await linkFolder(folderApi.handle, h, h.name)) {
-    await idb.set("gameDir", h);
-    savedHandle = null;
-    setGameStatus(`Linked: ${h.name} (remembered)`, true);
-    maybeRebuild();
-  }
-}
-
-async function pickGame() {
-  if (savedHandle) {
-    const h = savedHandle;
-    const perm = await h.requestPermission({ mode: "read" }).catch(() => "denied");
-    if (perm === "granted") return linkHandle(h);
-    setGameStatus(`Chrome didn't allow access to ${h.name} — choose the folder again.`, false);
-    savedHandle = null;
-    return;
-  }
-  if (!canPickDir) {
-    $("gameinput").click();
-    return;
-  }
-  let h;
-  try {
-    h = await window.showDirectoryPicker({ id: "eu5-install", mode: "read" });
-  } catch (e) {
-    // A folder Chrome blocks (Program Files) comes back as a plain cancel.
-    if (!game) setGameStatus("Nothing linked. If Chrome said the folder contains system files, drag it onto this box instead.");
-    return;
-  }
-  await linkHandle(h);
-}
-
-/* A folder remembered from an earlier visit: link it straight away if
-   Chrome still grants access, otherwise wait for a click to ask again. */
-async function restoreGame() {
-  if (!canPickDir) return;
-  const h = await idb.get("gameDir");
-  if (!h || typeof h.queryPermission !== "function") return;
-  const perm = await h.queryPermission({ mode: "read" }).catch(() => "denied");
-  if (perm === "granted") return linkHandle(h);
-  savedHandle = h;
-  setGameStatus(`Remembered: ${h.name}`, false, "Reconnect");
-}
-
+/* Drops anywhere on the page are saves (or data files). File handles must
+   be requested during the drop event itself; they let the saves be
+   remembered in the recent list (Chrome/Edge). */
 function onDrop(e) {
   e.preventDefault();
   document.querySelectorAll(".over").forEach((el) => el.classList.remove("over"));
   const dt = e.dataTransfer;
   if (!dt) return;
-  const item = dt.items && dt.items[0];
-  const entry = item && item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-  if (entry && entry.isDirectory) return linkDroppedFolder(entry);
-  // File handles must be requested during the drop event itself; they let
-  // the saves be remembered in the recent list (Chrome/Edge).
   const items = [...(dt.items || [])].filter((it) => it.kind === "file");
+  if (items.some((it) => it.webkitGetAsEntry && (it.webkitGetAsEntry() || {}).isDirectory)) return;
   const pending = items.map((it) => (canPickFile && it.getAsFileSystemHandle ? it.getAsFileSystemHandle() : null));
   const files = [...dt.files];
   if (!files.length) return;
@@ -388,13 +234,6 @@ function onDrop(e) {
     .then((h) => (h ? rememberSave(h, file) : null)).catch(() => null)
     .then((entry) => ({ file, entry }))))
     .then(handleFiles);
-}
-
-async function forgetGame() {
-  game = null;
-  savedHandle = null;
-  await idb.del("gameDir");
-  setGameStatus("Not linked");
 }
 
 // ==========================================================================
@@ -795,10 +634,10 @@ async function buildMany(items) {
     const report = { ...newest.full, timeline: { snapshots: snaps } };
     const gd = newest.full.world && newest.full.world.game_data;
     if (!game && (opts.flags || opts.map) && newest.file && !gd)
-      notes.push("The built-in game data couldn't be loaded, so there are no flags or map — link your EU5 install (step 2) instead.");
+      notes.push("The built-in game data couldn't be loaded, so this report has no flags or map. Check your connection and rebuild.");
     else if (gd && gd.source === "pack" && !gd.matches && newest.file)
       notes.push(`Flags and map use EU5 ${gd.version} game data, but this save is from ${newest.full.world.version}. ` +
-        "Link your own install (step 2) if anything looks off.");
+        "Newer nations or map changes may be missing until the game data is updated.");
     if (opts.map && newest.file && gd && !newest.full.map && !reduced)
       notes.push("The map couldn't be drawn — open Details above for the reason.");
     if (dupes.length)
@@ -1168,28 +1007,15 @@ function init() {
   });
   $("recentcompare").addEventListener("click", () => openEntries(recent.filter((r) => picked.has(r)), false));
   $("addsave").addEventListener("click", () => pickSave(true));
-  for (const zone of [drop, $("step-game")]) {
+  for (const zone of [drop]) {
     ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, () => zone.classList.add("over")));
     zone.addEventListener("dragleave", (e) => {
       if (!zone.contains(e.relatedTarget)) zone.classList.remove("over");
     });
   }
-  // Drops anywhere on the page: folders link the game, files are saves.
+  // Drops anywhere on the page are saves.
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", onDrop);
-  $("junccopy").addEventListener("click", () => {
-    const btn = $("junccopy");
-    navigator.clipboard.writeText($("junccmd").textContent).then(
-      () => { btn.textContent = "Copied"; setTimeout(() => { btn.textContent = "Copy"; }, 2000); },
-      () => { btn.textContent = "Select and copy it"; });
-  });
-
-  $("gamebtn").addEventListener("click", pickGame);
-  $("gameforget").addEventListener("click", forgetGame);
-  $("gameinput").addEventListener("change", (e) => {
-    if (e.target.files.length) linkFileList(e.target.files);
-    e.target.value = "";
-  });
 
   $("rebuild").addEventListener("click", () => lastItems && buildMany(lastItems));
   $("dlhtml").addEventListener("click", () => current &&
@@ -1222,7 +1048,6 @@ function init() {
     loadTemplate().catch(() => {});
     return;
   }
-  restoreGame();
   loadTemplate().catch(() => {});
   // name the built-in game data versions on the page
   fetch("gamedata/index.json").then((r) => (r.ok ? r.json() : null)).then((ix) => {

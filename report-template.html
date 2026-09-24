@@ -211,6 +211,29 @@ table.mat tbody tr:hover th.good{color:var(--accent)}
 .mapleg .sw.hatch{background:repeating-linear-gradient(45deg, var(--ink-3) 0 2px, transparent 2px 5px);
   opacity:.7}
 .mapleg b{color:var(--ink); font-weight:600; font-family:Archivo,sans-serif}
+.livemap{margin:0 0 4px}
+#mapimg[hidden],.maplegend[hidden]{display:none}
+.lmbar{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 10px}
+.lmbar .sctabs{margin:0}
+.lmspace{flex:1}
+.lmwrap{position:relative; border-radius:4px; overflow:hidden; border:1px solid var(--line-soft); background:#1f242b}
+#lmcanvas{display:block; width:100%; cursor:grab; touch-action:none}
+#lmcanvas:active{cursor:grabbing}
+#lmcanvas:focus{outline:none}
+.lmwrap:focus-within{outline:2px solid var(--accent-wash)}
+.lmtip{min-width:230px}
+.lmtip .lmrow{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:0 0 5px; color:var(--ink)}
+.lmtip .lmrow.occ{color:var(--alarm); font-size:11.5px}
+.lmtip .lmflag{width:24px; height:16px; border-radius:2px; border:1px solid var(--line)}
+.lmtip .sw{width:12px; height:12px; border-radius:2px}
+.lmtip .tg{font:600 10.5px "IBM Plex Mono",monospace; color:var(--ink-3)}
+.lmtip .pl{font-size:11px; color:var(--ink-3)}
+.lmtip .tr span:first-child{color:var(--ink-3)}
+.lmpin{margin-top:6px; font-size:10.5px; color:var(--ink-3); font-style:italic}
+.lmlegend{display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; margin:12px 4px 0}
+.lmscale{display:block; width:min(420px,100%); height:10px; border-radius:3px; border:1px solid var(--line-soft)}
+.lmticks{display:flex; justify-content:space-between; width:min(420px,100%); font:11px "IBM Plex Mono",monospace; color:var(--ink-3)}
+.lmnote{font-size:12.5px; color:var(--ink-3); flex-basis:100%}
 .mapactions{margin:16px 4px 0; display:flex; gap:10px; flex-wrap:wrap}
 footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-3);
   font-size:12.5px; display:flex; gap:18px; flex-wrap:wrap; justify-content:space-between}
@@ -246,6 +269,13 @@ footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); colo
   <div class="chartbox" style="margin-top:12px;position:relative"><svg class="scatter tlchart" id="tl" viewBox="0 0 780 420" role="img"></svg>
     <div class="tltip" id="tltip" hidden></div>
     <div class="tlleg" id="tlleg"></div></div>
+  <div class="mapactions">
+    <button class="btn" id="tlimg" type="button">Copy chart image</button>
+    <button class="btn" id="tlpng" type="button">Download image</button>
+    <button class="btn" id="tltxt" type="button">Copy for Discord (text)</button>
+  </div>
+  <details class="copywrap"><summary>&#9656; Show the Discord text</summary>
+    <textarea id="tltext" readonly spellcheck="false"></textarea></details>
   <div id="chgwrap" hidden>
     <div class="chghead"><h3>What changed</h3>
       <label>from <select class="sel" id="cmpfrom"></select></label>
@@ -259,7 +289,21 @@ footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); colo
   <details class="mapdetails" open>
     <summary class="sechead"><h2>The map</h2><span class="rule"></span><span class="car">&#9656;</span></summary>
     <p class="note">Every location tinted by owner, in the same colors EU&nbsp;V's own map mode uses for each nation &mdash; everyone else's territory sits in flat grey for context. Dependencies (vassals, fiefdoms, tributaries, and the like) are hatched in their overlord's color; a personal union's junior partner is hatched with its own secondary color instead of white, so it reads apart from an ordinary subject.</p>
-    <div class="mapwrap"><img id="mapimg" alt="Political map of the tracked nations">
+    <p class="note" id="maphint" hidden>The whole world, at the save&rsquo;s date: scroll or pinch to zoom, drag to move,
+      and hover (or tap) any location for its owner, population, development, control and tax. The map modes colour
+      every location by one figure.</p>
+    <div class="mapwrap">
+      <div class="livemap" id="livemap" hidden>
+        <div class="lmbar"><div class="sctabs" id="lmmodes" role="group" aria-label="Map mode"></div><span class="lmspace"></span>
+          <button class="btn" id="lmin" type="button" aria-label="Zoom in">+</button>
+          <button class="btn" id="lmout" type="button" aria-label="Zoom out">&minus;</button>
+          <button class="btn" id="lmfit" type="button">Players</button>
+          <button class="btn" id="lmworld" type="button">Whole world</button></div>
+        <div class="lmwrap"><canvas id="lmcanvas" aria-label="Interactive world map"></canvas>
+          <div class="tltip lmtip" id="lmtip" hidden></div></div>
+        <div class="lmlegend" id="lmlegend"></div>
+      </div>
+      <img id="mapimg" alt="Political map of the tracked nations">
       <div class="maplegend" id="maplegend"></div></div>
     <div class="mapactions">
       <button class="btn" id="mapimgbtn" type="button">Copy map image</button>
@@ -351,8 +395,10 @@ if(D.map){
       setTimeout(()=>{btn.textContent="Copy map image"; btn.classList.remove("ok");},2600); };
     try{
       if(!navigator.clipboard || !window.ClipboardItem) throw new Error("unsupported");
-      const res=await fetch(D.map.image);
-      const blob=await res.blob();
+      // the interactive map's current view when it's showing, else the static map
+      const blob=LIVE&&!$("livemap").hidden
+        ?await new Promise(ok=>LIVE.canvas.toBlob(ok,"image/png"))
+        :await (await fetch(D.map.image)).blob();
       await navigator.clipboard.write([new ClipboardItem({[blob.type||"image/png"]: blob})]);
       done(true,"Copied");
     }catch(e){
@@ -849,7 +895,7 @@ function chartPng(svg,title,sub){
   const hidden=new Set();
   let view=null; // what the last draw put on screen, for the hover tooltip
 
-  function draw(){
+  let draw=function(){
     const fmt=mode.fmt||num;
     const all=R.filter(r=>!hidden.has(r.id)).map(r=>({r,pts:series(r,mode)})).filter(s=>s.pts.length);
     const xs=[...all.flatMap(s=>s.pts.map(p=>p[0])),...(MULTI?TL.map(s=>yearOf(s.date)):[])];
@@ -902,7 +948,7 @@ function chartPng(svg,title,sub){
     tip.hidden=true; hoverIdx=null;
     svg.setAttribute("aria-label",mode.t+" over time, by nation. Hover, or focus and use the arrow keys, to read values.");
     $("tltabs").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.k===mode.k)));
-  }
+  };
   avail.forEach(m=>{
     const b=el("button","btn",esc(m.t)); b.type="button"; b.dataset.k=m.k;
     b.onclick=()=>{ mode=m; try{ localStorage.setItem(KEY,m.k); }catch(e){} draw(); };
@@ -995,6 +1041,57 @@ function chartPng(svg,title,sub){
     b.onmouseleave=()=>{ svg.classList.remove("focus"); svg.querySelectorAll(".hi").forEach(n=>n.classList.remove("hi")); };
     $("tlleg").appendChild(b);
   });
+  // ---- export this chart for Discord: image (clipboard or file) and text ----
+  const span=()=>MULTI?TL[0].date+" to "+TL[TL.length-1].date:"to "+W.date;
+  const tlTitle=()=>"Over time: "+mode.t.toLowerCase();
+  const tlSub=()=>span()+" · EU5 "+W.version;
+  const tlFile=()=>("EU5 over time "+mode.t+" "+W.date).replace(/[\\/:*?"<>|]+/g," ").replace(/\s+/g," ");
+  function tlText(){
+    const fmt=v=>mode.invert?"#"+Math.round(v):(mode.fmt||num)(v);
+    const rows=R.filter(r=>!hidden.has(r.id)).map(r=>({r,pts:series(r,mode)})).filter(o=>o.pts.length)
+      .map(o=>({r:o.r,a:o.pts[0],b:o.pts[o.pts.length-1]}))
+      .sort((x,y)=>mode.invert?x.b[1]-y.b[1]:y.b[1]-x.b[1]);
+    const chg=o=>{const d=o.b[1]-o.a[1]; if(!d) return "±0"; const s=mode.invert?(d<0?"+":"-"):(d>0?"+":"-");
+      return s+(mode.invert?String(Math.abs(Math.round(d))):String(fmt(Math.abs(d))).replace(/^#/,""));};
+    const cols=[
+      {h:"NATION",left:true,v:o=>o.r.name},
+      {h:"FROM",left:false,v:o=>fmt(o.a[1])+" ("+String(o.a[3]).split(".")[0]+")"},
+      {h:"NOW",left:false,v:o=>fmt(o.b[1])},
+      {h:mode.invert?"PLACES":"CHANGE",left:false,v:chg}];
+    const cells=rows.map(o=>cols.map(c=>String(c.v(o))));
+    const widths=cols.map((c,i)=>Math.min(24,Math.max(c.h.length,...cells.map(row=>row[i].length))));
+    const cut=(v,n)=>v.length<=n?v:v.slice(0,n-1)+"…";
+    const line=vals=>vals.map((v,i)=>{const t=cut(v,widths[i]); return cols[i].left?t.padEnd(widths[i]):t.padStart(widths[i]);}).join("  ").replace(/\s+$/,"");
+    return "**"+tlTitle()+"**  ·  "+tlSub()+"\n```\n"+[line(cols.map(c=>c.h)),...cells.map(line)].join("\n")+"\n```";
+  }
+  const tflash=(btn,label,ok,msg)=>{ btn.textContent=msg; btn.classList.toggle("ok",ok);
+    setTimeout(()=>{btn.textContent=label; btn.classList.remove("ok");},2400); };
+  $("tlimg").onclick=function(){
+    const btn=this; hideTip();
+    const png=chartPng(svg,tlTitle(),tlSub());
+    try{
+      if(!navigator.clipboard||!window.ClipboardItem) throw new Error("unsupported");
+      navigator.clipboard.write([new ClipboardItem({"image/png":png})])
+        .then(()=>tflash(btn,"Copy chart image",true,"Copied — paste into Discord"),
+              ()=>tflash(btn,"Copy chart image",false,"Couldn't copy — use Download image"));
+    }catch(e){ tflash(btn,"Copy chart image",false,"Not supported here — use Download image"); }
+  };
+  $("tlpng").onclick=async function(){
+    hideTip();
+    const url=URL.createObjectURL(await chartPng(svg,tlTitle(),tlSub()));
+    const a=document.createElement("a"); a.href=url; a.download=tlFile()+".png";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+  };
+  $("tltxt").onclick=function(){
+    const txt=tlText(), btn=this, box=$("tltext"); box.value=txt;
+    const done=ok=>tflash(btn,"Copy for Discord (text)",ok,ok?"Copied":"Press ⌘/Ctrl+C");
+    if(navigator.clipboard&&navigator.clipboard.writeText)
+      navigator.clipboard.writeText(txt).then(()=>done(true),()=>{ box.closest("details").open=true; box.focus(); box.select(); done(false); });
+    else { box.closest("details").open=true; box.focus(); box.select(); done(false); }
+  };
+  const drawTl=draw;
+  draw=function(){ drawTl(); const box=$("tltext"); if(box) box.value=tlText(); };
   draw();
 
   // ---- what changed between two saves ----
@@ -1418,6 +1515,224 @@ if(D.map){
     }
   };
 }
+
+/* ---- interactive map: the whole world, pan and zoom, per-location detail ----
+   Drawn with WebGL from a half-resolution location-id image hosted with the
+   game data; each location's colour comes from a small palette texture, so
+   switching map modes only rewrites the palette. Falls back to the static
+   image above when WebGL or the hosted data isn't available. */
+const LIVE=(function(){
+  const LM=D.locmap, LV=D.map&&D.map.live;
+  if(!LM||!LV||!LV.base) return null;
+  const box=$("livemap"), cv=$("lmcanvas"), tip=$("lmtip");
+  const gl=cv.getContext("webgl",{preserveDrawingBuffer:true,antialias:false});
+  if(!gl||gl.getParameter(gl.MAX_TEXTURE_SIZE)<8192) return null;
+  const hexRgb=h=>{const n=parseInt(String(h||"#888888").slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255];};
+  // water; other nations' land (players mode); land nobody owns
+  const BG=hexRgb(D.map.bg||"#ebe7dc"), LAND=hexRgb(D.map.land||"#b0aca3"), UNOWNED=[214,209,196];
+  const PW=256, PH=128;                       // palette: 32768 location ids
+  let TW=8192, TH=4096, names=[], land=null, byLid=new Map();
+  LM.locs.forEach(l=>byLid.set(l[0],l));
+
+  // ---- GL setup ----
+  const vsrc="attribute vec2 p; void main(){ gl_Position=vec4(p,0.0,1.0); }";
+  const fsrc=[
+    "precision highp float;",
+    "uniform sampler2D idx, pal, pal2;",
+    "uniform vec2 tex, canvas; uniform vec3 view; uniform float dpr, hover;",
+    "float lidAt(vec2 t){ vec4 c=texture2D(idx,t); return floor(c.g*255.0+0.5)*256.0+floor(c.b*255.0+0.5); }",
+    "vec4 palAt(sampler2D s,float id){ return texture2D(s,(vec2(mod(id,256.0),floor(id/256.0))+0.5)/vec2(256.0,128.0)); }",
+    "void main(){",
+    "  vec2 css=vec2(gl_FragCoord.x, canvas.y-gl_FragCoord.y)/dpr;",
+    "  vec2 t=(css-canvas/dpr*0.5)/view.z+view.xy;",   // texel coordinates
+    "  if(t.x<0.0||t.y<0.0||t.x>=tex.x||t.y>=tex.y){ gl_FragColor=vec4(0.12,0.14,0.17,1.0); return; }",
+    "  vec2 uv=(floor(t)+0.5)/tex;",
+    "  float id=lidAt(uv); vec4 c=palAt(pal,id); vec3 col=c.rgb;",
+    "  if(c.a<0.9){ float s=mod(floor((gl_FragCoord.x-gl_FragCoord.y)/(5.0*dpr)),2.0);",
+    "    if(s<0.5) col=col*0.45+palAt(pal2,id).rgb*0.55; }",
+    // borders: between colours always, between locations once zoomed in
+    "  vec2 f=fract(t); vec2 px=1.0/tex; float edge=0.0;",
+    "  float bw=view.z>=1.0?clamp(1.0/view.z,0.0,1.0):0.0;",
+    "  if(f.x>1.0-bw){ float n=lidAt(uv+vec2(px.x,0.0)); if(n!=id) edge=palAt(pal,n).rgb!=c.rgb?1.0:(view.z>=3.0?0.5:0.0); }",
+    "  if(f.y>1.0-bw){ float n=lidAt(uv+vec2(0.0,px.y)); if(n!=id) edge=max(edge,palAt(pal,n).rgb!=c.rgb?1.0:(view.z>=3.0?0.5:0.0)); }",
+    "  col*=1.0-0.35*edge;",
+    "  if(id==hover) col=mix(col,vec3(1.0),0.4);",
+    "  gl_FragColor=vec4(col,1.0);",
+    "}"].join("\n");
+  function sh(type,src){const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s;}
+  const prog=gl.createProgram();
+  gl.attachShader(prog,sh(gl.VERTEX_SHADER,vsrc)); gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,fsrc));
+  gl.linkProgram(prog); gl.useProgram(prog);
+  const buf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  const ap=gl.getAttribLocation(prog,"p"); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap,2,gl.FLOAT,false,0,0);
+  const U=n=>gl.getUniformLocation(prog,n);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL,gl.NONE);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+  function tex(unit){const t=gl.createTexture(); gl.activeTexture(gl.TEXTURE0+unit); gl.bindTexture(gl.TEXTURE_2D,t);
+    for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.NEAREST],[gl.TEXTURE_MAG_FILTER,gl.NEAREST],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
+    return t;}
+  const tIdx=tex(0), tPal=tex(1), tPal2=tex(2);
+  gl.uniform1i(U("idx"),0); gl.uniform1i(U("pal"),1); gl.uniform1i(U("pal2"),2);
+  const fbo=gl.createFramebuffer();  // reads a location id straight out of the index texture
+
+  // ---- map modes ----
+  const R_=Object.fromEntries(R.map(r=>[r.id,r]));
+  const nat=i=>LM.owners[i]||["","?","?",null,null];
+  const PL=LV.pcol||{}, SJ=LV.subj||{};
+  const RAMP=[[252,244,214],[247,206,122],[232,139,70],[190,72,48],[110,28,48]];
+  const ramp=q=>{q=Math.max(0,Math.min(1,q))*(RAMP.length-1); const i=Math.min(RAMP.length-2,Math.floor(q)), f=q-i;
+    return RAMP[i].map((a,k)=>Math.round(a+(RAMP[i+1][k]-a)*f));};
+  const people=v=>{v=N(v)*1000; return v>=1e6?(v/1e6).toFixed(2)+" M":v>=1e3?(v/1e3).toFixed(1)+" K":Math.round(v)+"";};
+  const MODES=[
+    {k:"players",t:"Players"},
+    {k:"nations",t:"All nations"},
+    {k:"dev",t:"Development",i:5,f:v=>f1(v)},
+    {k:"pop",t:"Population",i:10,f:people},
+    {k:"control",t:"Control",i:6,f:v=>(v*100).toFixed(0)+"%",fixed:[0,1]},
+    {k:"tax",t:"Tax",i:7,f:v=>f2(v)},
+    {k:"prosp",t:"Prosperity",i:9,f:v=>(v*100).toFixed(0)+"%",fixed:[0,1]},
+  ];
+  let mode=MODES[0];
+  function buildPalette(){
+    const p=new Uint8Array(PW*PH*4), p2=new Uint8Array(PW*PH*4);
+    const set=(lid,rgb,a,sec)=>{const o=lid*4; p[o]=rgb[0]; p[o+1]=rgb[1]; p[o+2]=rgb[2]; p[o+3]=a;
+      if(sec){p2[o]=sec[0]; p2[o+1]=sec[1]; p2[o+2]=sec[2];}};
+    for(let lid=1;lid<names.length&&lid<PW*PH;lid++) set(lid,land&&land[lid]?UNOWNED:BG,255);
+    let qs=null;
+    if(mode.i!=null&&!mode.fixed){ const vs=LM.locs.map(l=>N(l[mode.i])).sort((a,b)=>a-b); qs=vs; }
+    const scale=v=>{ if(mode.fixed) return (v-mode.fixed[0])/(mode.fixed[1]-mode.fixed[0]);
+      let lo=0,hi=qs.length-1; while(lo<hi){const m=(lo+hi)>>1; if(qs[m]<v) lo=m+1; else hi=m;} return qs.length>1?lo/(qs.length-1):0.5; };
+    LM.locs.forEach(l=>{
+      const lid=l[0], o=l[1];
+      if(mode.k==="players"){
+        if(PL[o]) set(lid,hexRgb(PL[o]),255);
+        else if(SJ[o]&&PL[SJ[o][0]]) set(lid,hexRgb(PL[SJ[o][0]]),128,hexRgb(SJ[o][1]));
+        else set(lid,LAND,255);
+      } else if(mode.k==="nations"){
+        const c=nat(o)[3]; set(lid,c?hexRgb(c):LAND,255);
+      } else set(lid,ramp(scale(N(l[mode.i]))),255);
+    });
+    gl.activeTexture(gl.TEXTURE1); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,PW,PH,0,gl.RGBA,gl.UNSIGNED_BYTE,p);
+    gl.activeTexture(gl.TEXTURE2); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,PW,PH,0,gl.RGBA,gl.UNSIGNED_BYTE,p2);
+    legend(qs);
+  }
+  function legend(qs){
+    const lg=$("lmlegend"), st=$("maplegend");
+    st.hidden=mode.k!=="players";
+    if(mode.k==="players"){ lg.innerHTML=""; return; }
+    const unowned='<span class="mapleg"><span class="sw" style="background:rgb('+UNOWNED+')"></span>Unowned land</span>';
+    if(mode.k==="nations"){ lg.innerHTML=unowned+'<span class="lmnote">Every nation in its own colour. Hover a location for its owner.</span>'; return; }
+    const at=q=>mode.fixed?mode.fixed[0]+(mode.fixed[1]-mode.fixed[0])*q:qs[Math.round(q*(qs.length-1))];
+    lg.innerHTML='<span class="lmscale" style="background:linear-gradient(90deg,'+RAMP.map(c=>"rgb("+c+")").join(",")+')"></span>'
+      +'<span class="lmticks">'+[0,.25,.5,.75,1].map(q=>'<span>'+esc(mode.f(at(q)))+'</span>').join("")+'</span>'
+      +unowned+'<span class="lmnote">'+esc(mode.t)+' of every owned location'+(mode.fixed?'':', coloured by rank so the spread shows')+'.</span>';
+  }
+
+  // ---- view: centre in texels, scale in screen px per texel ----
+  let view={x:TW/2,y:TH/2,z:0.1}, hover=0, pinned=null, dirty=true;
+  function size(){ const w=box.clientWidth, h=Math.max(380,Math.min(760,Math.round(w*0.55))), d=Math.min(2,window.devicePixelRatio||1);
+    cv.style.height=h+"px"; cv.width=Math.round(w*d); cv.height=Math.round(h*d); dirty=true; }
+  const W=()=>cv.width/(Math.min(2,window.devicePixelRatio||1)), H=()=>cv.height/(Math.min(2,window.devicePixelRatio||1));
+  function clampView(){ const minZ=Math.min(W()/TW,H()/TH)*0.9; view.z=Math.max(minZ,Math.min(24,view.z));
+    view.x=Math.max(0,Math.min(TW,view.x)); view.y=Math.max(0,Math.min(TH,view.y)); }
+  function fit(x0,y0,x1,y1){ view.x=(x0+x1)/2; view.y=(y0+y1)/2; view.z=Math.min(W()/Math.max(1,x1-x0),H()/Math.max(1,y1-y0)); clampView(); dirty=true; }
+  const fitPlayers=()=>{ const v=LV.view||[0,0,1,1]; fit(v[0]*TW,v[1]*TH,v[2]*TW,v[3]*TH); };
+  const fitWorld=()=>fit(0,0,TW,TH);
+  function draw(){ if(!dirty) return; dirty=false;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.viewport(0,0,cv.width,cv.height);
+    gl.uniform2f(U("tex"),TW,TH); gl.uniform2f(U("canvas"),cv.width,cv.height);
+    gl.uniform3f(U("view"),view.x,view.y,view.z); gl.uniform1f(U("dpr"),cv.width/W()); gl.uniform1f(U("hover"),hover);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4); }
+  const loop=()=>{ draw(); requestAnimationFrame(loop); };
+  const toTexel=(e)=>{ const b=cv.getBoundingClientRect(); return [(e.clientX-b.left-b.width/2)/view.z+view.x,(e.clientY-b.top-b.height/2)/view.z+view.y]; };
+  function lidAtTexel(tx,ty){ tx=Math.floor(tx); ty=Math.floor(ty); if(tx<0||ty<0||tx>=TW||ty>=TH) return 0;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,fbo); const px=new Uint8Array(4); gl.readPixels(tx,ty,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null); return px[1]*256+px[2]; }
+
+  // ---- tooltip: one location ----
+  const pn=s=>String(s||"").replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+  function nationLine(i){ const o=nat(i), r=R_[o[0]];
+    const sw=r&&r.flag?'<img class="lmflag" src="'+esc(r.flag)+'" alt="">':'<span class="sw" style="background:'+esc(o[3]||"#888")+'"></span>';
+    return sw+'<b>'+esc(r?r.name:o[2])+'</b> <span class="tg">'+esc(o[1])+'</span>'+(o[4]?' <span class="pl">'+esc(o[4])+'</span>':''); }
+  function showTip(lid,e){
+    if(!lid){ tip.hidden=true; return; }
+    const l=byLid.get(lid), nm=pn(names[lid]||"location "+lid);
+    let h='<h5>'+esc(nm)+'</h5>';
+    if(!l) h+='<div class="lmrow">'+(land&&land[lid]?"Unowned land":"Sea, lake or wasteland")+'</div>';
+    else {
+      h+='<div class="lmrow">'+nationLine(l[1])+'</div>';
+      if(l[2]>=0) h+='<div class="lmrow occ">Occupied by '+nationLine(l[2])+'</div>';
+      const kv=(a,b)=>'<div class="tr"><span>'+a+'</span><span class="v">'+b+'</span></div>';
+      h+=kv("Settlement",esc(pn(LM.ranks[l[3]])))+kv("Raw material",esc(pn(pretty(LM.raws[l[4]]||"none"))))
+        +kv("Population",people(l[10]))+kv("Development",f1(l[5]))+kv("Control",(l[6]*100).toFixed(0)+"%")
+        +kv("Tax / possible",f2(l[7])+" / "+f2(l[8]))+kv("Prosperity",(l[9]*100).toFixed(0)+"%");
+    }
+    tip.innerHTML=h+(pinned?'<div class="lmpin">pinned &mdash; click the map to release</div>':'');
+    tip.hidden=false;
+    const b=box.querySelector(".lmwrap").getBoundingClientRect(), x=e.clientX-b.left, y=e.clientY-b.top;
+    const w=tip.offsetWidth, hh=tip.offsetHeight;
+    tip.style.left=Math.max(6,Math.min(b.width-w-6,x+16>b.width-w-6?x-16-w:x+16))+"px";
+    tip.style.top=Math.max(6,Math.min(b.height-hh-6,y-hh/2))+"px";
+  }
+
+  // ---- interaction ----
+  let drag=null, moved=false, pinch=null; const ptrs=new Map();
+  cv.addEventListener("pointerdown",e=>{ cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+    moved=false; if(ptrs.size===1) drag={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y};
+    else if(ptrs.size===2){ const [a,b]=[...ptrs.values()]; pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),z:view.z}; drag=null; } });
+  cv.addEventListener("pointermove",e=>{
+    if(ptrs.has(e.pointerId)) ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+    if(pinch&&ptrs.size===2){ const [a,b]=[...ptrs.values()]; view.z=pinch.z*Math.hypot(a[0]-b[0],a[1]-b[1])/pinch.d; clampView(); dirty=true; return; }
+    if(drag){ const dx=e.clientX-drag.x, dy=e.clientY-drag.y; if(Math.abs(dx)+Math.abs(dy)>3) moved=true;
+      view.x=drag.vx-dx/view.z; view.y=drag.vy-dy/view.z; clampView(); dirty=true; tip.hidden=true; return; }
+    if(pinned) return;
+    const [tx,ty]=toTexel(e), lid=lidAtTexel(tx,ty);
+    if(lid!==hover){ hover=lid; dirty=true; }
+    showTip(lid,e);
+  });
+  const up=e=>{ ptrs.delete(e.pointerId); if(ptrs.size<2) pinch=null;
+    if(drag&&!moved&&e.type==="pointerup"){ const [tx,ty]=toTexel(e), lid=lidAtTexel(tx,ty);
+      pinned=pinned?null:(lid||null); hover=lid; dirty=true; showTip(lid,e); }
+    drag=null; };
+  cv.addEventListener("pointerup",up); cv.addEventListener("pointercancel",up);
+  cv.addEventListener("pointerleave",()=>{ if(!pinned){ tip.hidden=true; hover=0; dirty=true; } });
+  cv.addEventListener("wheel",e=>{ e.preventDefault();
+    const [tx,ty]=toTexel(e), k=Math.exp(-e.deltaY*0.0015);
+    view.z*=k; clampView(); const [nx,ny]=toTexel(e); view.x+=tx-nx; view.y+=ty-ny; clampView(); dirty=true; },{passive:false});
+  const zoomBy=k=>{ view.z*=k; clampView(); dirty=true; };
+  $("lmin").onclick=()=>zoomBy(1.6); $("lmout").onclick=()=>zoomBy(1/1.6);
+  $("lmfit").onclick=fitPlayers; $("lmworld").onclick=fitWorld;
+  cv.tabIndex=0;
+  cv.addEventListener("keydown",e=>{ const s=60/view.z;
+    if(e.key==="ArrowLeft") view.x-=s; else if(e.key==="ArrowRight") view.x+=s; else if(e.key==="ArrowUp") view.y-=s;
+    else if(e.key==="ArrowDown") view.y+=s; else if(e.key==="+"||e.key==="=") view.z*=1.4; else if(e.key==="-") view.z/=1.4; else return;
+    e.preventDefault(); clampView(); dirty=true; });
+  MODES.forEach(m=>{ const b=el("button","btn",esc(m.t)); b.type="button"; b.dataset.k=m.k;
+    b.onclick=()=>{ mode=m; $("lmmodes").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); buildPalette(); dirty=true; };
+    $("lmmodes").appendChild(b); });
+  $("lmmodes").firstChild.setAttribute("aria-pressed","true");
+  window.addEventListener("resize",()=>{ size(); clampView(); });
+
+  // ---- load the hosted raster and location table ----
+  const base=LV.base;
+  Promise.all([fetch(base+"map.json").then(r=>{if(!r.ok) throw new Error(r.status); return r.json();}),
+               fetch(base+"locations_half.png").then(r=>{if(!r.ok) throw new Error(r.status); return r.blob();})])
+  .then(async([meta,blob])=>{
+    const img=await createImageBitmap(blob,{premultiplyAlpha:"none",colorSpaceConversion:"none"});
+    TW=img.width; TH=img.height;
+    gl.activeTexture(gl.TEXTURE0); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,fbo); gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tIdx,0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    names=meta.names||[];
+    const landKeys=new Set(meta.land||[]); land=new Uint8Array(names.length);
+    (meta.locations||[]).forEach((k,lid)=>{ if(landKeys.has(k)) land[lid]=1; });
+    box.hidden=false; $("mapimg").hidden=true; $("maphint").hidden=false;
+    size(); fitPlayers(); buildPalette(); loop();
+  }).catch(err=>{ box.hidden=true; console.warn("interactive map unavailable:",err); });
+  return { canvas:cv };
+})();
 
 /* ---- goods matrix: sortable by any column ---- */
 (function(){

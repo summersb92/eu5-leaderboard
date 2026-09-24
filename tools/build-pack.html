@@ -148,6 +148,7 @@ async function build() {
     { name: dir + "pack.json", data: enc.encode(JSON.stringify(meta, null, 1)) },
     { name: dir + "map.json", data: enc.encode(JSON.stringify(pack.map)) },
     { name: dir + "locations.png", data: new Uint8Array(pack.png) },
+    { name: dir + "locations_half.png", data: new Uint8Array(pack.raster) },
     ...Object.entries(pack.flags).map(([tag, buf]) => ({ name: dir + "flags/tag-" + tag + ".png", data: new Uint8Array(buf) })),
   ];
   // the index lists every pack; add or replace this one
