@@ -1421,19 +1421,22 @@ function discordCols(){
   });
   return out;
 }
+/* Discord text: header, the standings table as a code block, then the
+   Notables. Discord messages hold 2,000 characters; to keep as much of the
+   table as possible, Notables go first (from the end), then the name columns
+   narrow, and only then do the bottom rows go - with no filler text. */
+const DISCORD_LIMIT=2000;
 function discordText(){
   const cols=discordCols();
-  let cells=lastOrder.map(r=>cols.map(c=>c.v(r)));
-  const widthOf=i=>Math.min(22,Math.max(cols[i].h.length,...cells.map(row=>row[i].length)));
-  let widths=cols.map((c,i)=>widthOf(i));
-  const row=vals=>vals.map((v,i)=>{
-    const w=widths[i], t=thin(v,w);
-    return cols[i].left?t.padEnd(w):t.padStart(w);
-  }).join("  ").replace(/\s+$/,"");
+  const cells=lastOrder.map(r=>cols.map(c=>c.v(r)));
   const head="**"+W.date+" — "+nPlayers+" player nations**  ·  EU5 "+W.version+
              "  ·  world pop "+(W.world_pop/1000).toFixed(1)+"M";
-  const body=[row(cols.map(c=>c.h))];
-  cells.forEach(vals=>body.push(row(vals)));
+  const table=(cap,n)=>{
+    const widths=cols.map((c,i)=>Math.min(c.left?cap:22,Math.max(c.h.length,...cells.slice(0,n).map(row=>row[i].length))));
+    const row=vals=>vals.map((v,i)=>{ const w=widths[i], x=thin(v,w); return cols[i].left?x.padEnd(w):x.padStart(w); })
+      .join("  ").replace(/\s+$/,"");
+    return [row(cols.map(c=>c.h)),...cells.slice(0,n).map(row)].join("\n");
+  };
   const best=(k,fmt)=>{const b=[...R].sort((a,c)=>N(c[k])-N(a[k]))[0]; return b.name+" ("+fmt(b)+")";};
   const tall=[...R].sort((a,b)=>(b.taxbase/(b.locations||1))-(a.taxbase/(a.locations||1)))[0];
   const notes=[
@@ -1447,12 +1450,12 @@ function discordText(){
   ];
   const deep=[...R].sort((a,b)=>N(b.debt)-N(a.debt))[0];
   if(N(deep.debt)>0) notes.push("Deepest debt: "+deep.name+" ("+int(deep.debt)+")");
-  let txt=head+"\n```\n"+body.join("\n")+"\n```\n**Notables**  ·  "+notes.join("  ·  ");
-  while(txt.length>1900 && body.length>2){
-    body.pop();
-    txt=head+"\n```\n"+body.join("\n")+"\n(truncated to fit Discord's limit)\n```\n**Notables**  ·  "+notes.join("  ·  ");
-  }
-  return txt;
+  const build=(tbl,k)=>head+"\n```\n"+tbl+"\n```"+(k?"\n**Notables**  ·  "+notes.slice(0,k).join("  ·  "):"");
+  const full=table(22,cells.length);
+  for(let k=notes.length;k>=0;k--){ const x=build(full,k); if(x.length<=DISCORD_LIMIT) return x; }
+  for(const cap of [16,12,9]){ const x=build(table(cap,cells.length),0); if(x.length<=DISCORD_LIMIT) return x; }
+  for(let n=cells.length-1;n>=1;n--){ const x=build(table(9,n),0); if(x.length<=DISCORD_LIMIT) return x; }
+  return build(table(9,1),0);
 }
 function refreshDiscord(){ try{ const t=$("dtext"); if(t) t.value=discordText(); }catch(e){} }
 $("copybtn").onclick=function(){
