@@ -103,10 +103,11 @@ by population. 20% exposure is enough to embrace one. With several saves, a
 table shows what each nation embraced between one save and the next, and
 **Over time** charts the count.
 
-Each embraced institution also shows the advances learned from it (those
-it unlocks, directly or through the advances they require) and the research
-they cost, and each nation its total advances and research paid, leaving out
-the advances it started with. The save doesn't record research costs, so
+Each embraced institution also shows the advances gained from it since the
+game began (those it unlocks, directly or through the advances they require)
+and the research they cost, and each nation its total advances gained and
+research paid. Advances gained are the ones the save has, less those the
+nation started with (from the game files' starting technology levels). The save doesn't record research costs, so
 they're estimated from the game's cost rules: a base of 25 research, 15% more
 each age, times the advance's own `research_cost` multiplier. The game makes
 advances from an earlier age cheaper, so the estimate can run high. Which

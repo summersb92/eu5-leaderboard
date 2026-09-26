@@ -1799,8 +1799,8 @@ const LIVE=(function(){
   $("instnote").innerHTML='&#10003; embraced. Otherwise, the share of the nation&rsquo;s people exposed to it so far: '
     +'at 20% it can be embraced (marked &bull;), and it gets cheaper the further it has spread. Institutions that '
     +'haven&rsquo;t appeared anywhere yet are left out. Under each &#10003;: the advances learned from that institution '
-    +'and the research they cost. <em>Advances</em> counts every advance learned, and <em>research paid</em> what they cost, '
-    +'leaving out the ones the nation started with. The save doesn&rsquo;t record research costs, so they&rsquo;re estimated '
+    +'since the game began, and the research they cost. <em>Advances gained</em> counts the advances learned since the game began (what the save has, less what '
+    +'the nation started with), and <em>research paid</em> what they cost. The save doesn&rsquo;t record research costs, so they&rsquo;re estimated '
     +'from the game&rsquo;s cost rules: 25 research, 15% more each age, times the advance&rsquo;s own multiplier. '
     +'Advances researched after their age cost less in game, so this can run high.';
   const hasAdv=R.some(r=>r.adv_by_inst);
@@ -1811,7 +1811,7 @@ const LIVE=(function(){
   flush();
   let h='<thead><tr class="ages"><th class="good"></th>'+ages+'<th colspan="'+(hasAdv?3:1)+'"></th></tr><tr><th class="good" style="text-align:left">Nation</th>'
     +act.map(k=>'<th>'+esc(instName(k))+'</th>').join("")+'<th>Embraced</th>'
-    +(hasAdv?'<th>Advances</th><th>Research paid (est.)</th>':'')+'</tr></thead><tbody>';
+    +(hasAdv?'<th>Advances gained</th><th>Research paid (est.)</th>':'')+'</tr></thead><tbody>';
   rows.forEach(r=>{
     const has=new Set(r.institutions||[]), pr=r.inst_presence||{};
     h+='<tr>'+natTh(r);
@@ -1830,7 +1830,7 @@ const LIVE=(function(){
         +'<span class="cell'+(v?'':' e')+(v>=0.2?' ready':'')+'">'+(v?(v*100).toFixed(0)+'%':'&middot;')+'</span></td>';
     });
     h+='<td><span class="cell tot">'+int(r.n_institutions)+'</span></td>';
-    if(hasAdv) h+='<td><span class="cell">'+int(r.advances)+'</span></td><td><span class="cell">'+(r.research_paid==null?'&middot;':int(r.research_paid))+'</span></td>';
+    if(hasAdv) h+='<td><span class="cell">'+(r.advances_gained==null?'&middot;':int(r.advances_gained))+'</span></td><td><span class="cell">'+(r.research_paid==null?'&middot;':int(r.research_paid))+'</span></td>';
     h+='</tr>';
   });
   $("insttab").innerHTML=h+'</tbody>';
@@ -1846,13 +1846,13 @@ const LIVE=(function(){
       g+='<tr>'+natTh(r);
       const first=snaps[0].rows.find(x=>x.id===r.id);
       g+='<td><span class="cell'+(first?'':' e')+'">'+(first?int((first.institutions||[]).length)+' embraced':'&middot;')+'</span>'
-        +(first&&first.advances!=null?'<span class="isub">'+int(first.advances)+' adv'+(first.research_paid!=null?' &middot; '+int(first.research_paid):'')+'</span>':'')+'</td>';
+        +(first&&first.advances_gained!=null?'<span class="isub">'+plus(first.advances_gained)+' adv'+(first.research_paid!=null?' &middot; '+int(first.research_paid):'')+'</span>':'')+'</td>';
       pairs.forEach(([a,b])=>{
         const x=a.rows.find(q=>q.id===r.id), y=b.rows.find(q=>q.id===r.id);
         if(!y){ g+='<td><span class="cell e">&middot;</span></td>'; return; }
         const before=new Set((x&&x.institutions)||[]);
         const got=(y.institutions||[]).filter(k=>!before.has(k));
-        const dAdv=x?N(y.advances)-N(x.advances):null;
+        const dAdv=x&&x.advances_gained!=null&&y.advances_gained!=null?N(y.advances_gained)-N(x.advances_gained):null;
         const dRes=x&&x.research_paid!=null&&y.research_paid!=null?N(y.research_paid)-N(x.research_paid):null;
         const sub=dAdv==null?'':'<span class="isub">'+plus(dAdv)+' adv'+(dRes==null?'':' &middot; '+plus(dRes)+' research')+'</span>';
         g+='<td>'+(got.length?'<div class="ilog">'+got.map(k=>'<span class="chip">+'+esc(instName(k))+'</span>').join("")+sub+'</div>'
@@ -1871,7 +1871,7 @@ const LIVE=(function(){
       const has=new Set(r.institutions||[]), pr=r.inst_presence||{};
       const cells=act.map(k=>" "+(has.has(k)?"ok":N(pr[k])?Math.round(N(pr[k])*100)+"%":"-").padStart(5));
       let x=r.tag.padEnd(4)+cells.join("")+String(int(r.n_institutions)).padStart(3)
-        +(hasAdv?String(int(r.advances)).padStart(5)+(r.research_paid==null?"-":int(r.research_paid)).padStart(9):"");
+        +(hasAdv?(r.advances_gained==null?"-":plus(r.advances_gained)).padStart(5)+(r.research_paid==null?"-":int(r.research_paid)).padStart(9):"");
       if(last){
         const a=last[0].rows.find(q=>q.id===r.id), b=last[1].rows.find(q=>q.id===r.id);
         const before=new Set((a&&a.institutions)||[]);
@@ -1881,7 +1881,7 @@ const LIVE=(function(){
       return x;
     });
     const headRow="    "+act.map(k=>" "+abbr(k).padStart(5)).join("")+"  #"+(hasAdv?"  Adv   Rsrch~":"")+(last?"  new since "+last[0].date:"");
-    const head="**Institutions · "+W.date+"**  ·  ok = embraced, % = people exposed (20% to embrace)"+(hasAdv?", Adv = advances learned, Rsrch~ = research paid (est.)":"");
+    const head="**Institutions · "+W.date+"**  ·  ok = embraced, % = people exposed (20% to embrace)"+(hasAdv?", Adv = advances gained since the start, Rsrch~ = research paid (est.)":"");
     let n=lines.length, out;
     do { out=head+"\n```\n"+[headRow,...lines.slice(0,n)].join("\n")+"\n```"; n--; } while(out.length>2000&&n>0);
     return out;

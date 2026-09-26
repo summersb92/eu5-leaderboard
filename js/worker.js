@@ -128,8 +128,9 @@ async function loadAdvanceTable(fs) {
 const RESEARCH_BASE = 25, RESEARCH_AGE_STEP = 0.15;
 const advanceCost = (age, add) => RESEARCH_BASE * Math.pow(1 + RESEARCH_AGE_STEP, age) * Math.max(0, 1 + add);
 
-/* Per country: advances researched per age and per institution, and the
-   research they cost (leaving out the ones it started the game with). */
+/* Per country: advances gained since the game started (researched, less
+   the ones it started with), per age and per institution, and the research
+   they cost. */
 function attachAdvanceStats(rows, table) {
   for (const r of rows) {
     const done = r._researched, level = r._startLevel;
@@ -139,9 +140,9 @@ function attachAdvanceStats(rows, table) {
     for (const a of done) {
       const d = table.adv[a];
       if (!d) continue;
+      if (d[0] === 0 && d[3] && level != null && d[3] <= level) continue;
       byAge[d[0]]++;
-      const free = d[0] === 0 && d[3] && level != null && d[3] <= level;
-      const c = free ? 0 : advanceCost(d[0], d[1]);
+      const c = advanceCost(d[0], d[1]);
       paid += c;
       if (d[2]) { byInst[d[2]] = (byInst[d[2]] || 0) + 1; costInst[d[2]] = (costInst[d[2]] || 0) + c; }
     }
