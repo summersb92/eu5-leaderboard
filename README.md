@@ -94,6 +94,54 @@ location's pops. After a game patch, regenerate the table with
 `py tools/extract_military_modifiers.py` and paste it over `MIL_SOURCES` in
 `js/worker.js`.
 
+## Capital & governor finder
+
+`placement.html` uses the same save reading and game-data pack to find where
+a nation's capital and local governors would spread the most proximity. Pick
+a nation (players first) and it tries every owned location as a new local
+governor and as the capital, then the best few capitals each with their own
+governors, and ranks them by the settled tax base they add: each location's
+possible tax times the max control its proximity gives (0.75% per point).
+Governors are placed one after another, each where it adds the most on top
+of the last. By default it only suggests cities with a road to the capital;
+untick that to see where to build towards. A governor still being built
+counts as finished unless you untick that too.
+
+| File | Role |
+| --- | --- |
+| `placement.html`, `css/placement.css`, `js/placement.js` | Page, results, proximity map |
+| `js/placement-worker.js` | Reads the save (via `worker.js`) and runs the searches |
+| `js/proximity.js` | The proximity model; also loads in Node for testing |
+| `tools/build_proximity_graph.js` | Builds `gamedata/<version>/proximity.json` |
+
+### Placement model
+
+Proximity starts at 100 in the capital and 80 at a local governor; each hop
+to a neighbouring location costs, from the game files: 40 overland, the
+road's cost along a road (20, less 5/10/15 for paved, modern and rail), 12
+along a river, 30 at sea blending to 5 with the country's maritime presence,
+5 on lakes. Overland hops are raised by the terrain of the location being
+left (mountains +50%, forest +25%, ...) and cut by up to 20% for its
+development. Moving between land and sea costs 35, less up to half with the
+natural harbour, through ports only; those two numbers were fitted to real
+saves rather than read from the game.
+
+Everything else that changes proximity costs for a country (advances,
+laws, societal values) is folded into one factor per nation, fitted to the
+proximity the save records for each of its locations; the page reports how
+close the fit is. Against a 1385 multiplayer save the mean error was 0.7 to 6
+proximity per location depending on the nation; sea and lagoon routes are
+the weakest part.
+
+`proximity.json` holds each location's borders (from `locations.png` and
+`adjacencies.csv`), river links (`rivers.png`), ports (`ports.csv`),
+terrain, natural harbour, English name and centre, plus the base costs.
+After a game patch, rebuild it next to the pack's `map.json`:
+
+```
+node tools/build_proximity_graph.js "<EU5 install>/game" 1.3.11
+```
+
 ## Institutions
 
 The report shows which institutions each nation has embraced and, for each
