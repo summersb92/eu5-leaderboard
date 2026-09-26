@@ -1804,6 +1804,15 @@ const LIVE=(function(){
     +'from the game&rsquo;s cost rules: 25 research, 15% more each age, times the advance&rsquo;s own multiplier. '
     +'Advances researched after their age cost less in game, so this can run high.';
   const hasAdv=R.some(r=>r.adv_by_inst);
+  // the save before the latest one, for the green "+N" beside each total
+  const prevSnap=TL.length>=2?TL[TL.length-2]:null;
+  const totDelta=(r,k)=>{
+    const was=prevSnap&&prevSnap.rows.find(x=>x.id===r.id);
+    if(!was||was[k]==null||r[k]==null) return "";
+    const d=Math.round(N(r[k])-N(was[k]));
+    return ' <span class="delta '+(d>0?"up":d<0?"dn":"same")+'" title="since '+esc(prevSnap.date)+'">'+(d>0?"+":d<0?"-":"&plusmn;")+int(Math.abs(d))+'</span>';
+  };
+  if(prevSnap) $("instnote").innerHTML+=' The <span class="delta up">+#</span> beside each total is the change since the previous save ('+esc(prevSnap.date)+').';
   // age headings over their institutions
   let ages='', run=null, span=0;
   const flush=()=>{ if(span) ages+='<th colspan="'+span+'">'+esc(run?"Age of "+run:"")+'</th>'; };
@@ -1829,8 +1838,9 @@ const LIVE=(function(){
         +' title="'+esc(instName(k))+': '+(v*100).toFixed(1)+'% of people exposed'+(v>=0.2?", can be embraced":"")+'">'
         +'<span class="cell'+(v?'':' e')+(v>=0.2?' ready':'')+'">'+(v?(v*100).toFixed(0)+'%':'&middot;')+'</span></td>';
     });
-    h+='<td><span class="cell tot">'+int(r.n_institutions)+'</span></td>';
-    if(hasAdv) h+='<td><span class="cell">'+(r.advances_gained==null?'&middot;':int(r.advances_gained))+'</span></td><td><span class="cell">'+(r.research_paid==null?'&middot;':int(r.research_paid))+'</span></td>';
+    h+='<td><span class="cell tot">'+int(r.n_institutions)+totDelta(r,"n_institutions")+'</span></td>';
+    if(hasAdv) h+='<td><span class="cell">'+(r.advances_gained==null?'&middot;':int(r.advances_gained))+totDelta(r,"advances_gained")+'</span></td>'
+      +'<td><span class="cell">'+(r.research_paid==null?'&middot;':int(r.research_paid))+totDelta(r,"research_paid")+'</span></td>';
     h+='</tr>';
   });
   $("insttab").innerHTML=h+'</tbody>';
