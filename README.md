@@ -65,7 +65,9 @@ pre-rendered with the page's own renderer; the `tag-` prefix keeps names
 like `AUX` and `CON` legal on Windows), `locations.png` (the game's own map
 image), `locations_half.png` (a half-resolution copy whose pixels hold
 location ids, for the interactive map), `map.json` (each location's colour,
-name and land/water, each tag's map and secondary colours) and `pack.json` (game version, version name, Steam
+name and land/water, each tag's map and secondary colours), `advances.json`
+(each advance's age, research cost multiplier, institution and starting
+level) and `pack.json` (game version, version name, Steam
 build). `gamedata/index.json` lists the packs. A report uses the pack for
 the version its save records, else the newest, and says which it used.
 
@@ -100,6 +102,16 @@ people exposed to it: the save keeps each location's exposure, weighted here
 by population. 20% exposure is enough to embrace one. With several saves, a
 table shows what each nation embraced between one save and the next, and
 **Over time** charts the count.
+
+Each embraced institution also shows the advances learned from it (those
+it unlocks, directly or through the advances they require) and the research
+they cost, and each nation its total advances and research paid, leaving out
+the advances it started with. The save doesn't record research costs, so
+they're estimated from the game's cost rules: a base of 25 research, 15% more
+each age, times the advance's own `research_cost` multiplier. The game makes
+advances from an earlier age cheaper, so the estimate can run high. Which
+institution each advance belongs to, its age and its multiplier come from
+`advances.json` in the game-data pack.
 
 ## Running locally
 

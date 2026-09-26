@@ -30,6 +30,7 @@ const FIELDS = {
   navy_tradition: "Navy trad.", navy_upkeep: "Navy upkeep", kills: "Killed", war_battle: "Battle dead",
   war_attrition: "Attrition dead", wars: "Wars", rebels: "Rebellions",
   advances: "Advances", advances_gained: "Adv. gained", n_institutions: "Institutions",
+  research_paid: "Research paid (est.)",
   prestige: "Prestige", stability: "Stability",
   govpower: "Gov. power", gp_points: "GP points", score_place: "World rank",
   _sp: "Pop trend",
@@ -104,8 +105,8 @@ function sanitizeData(d) {
       else if (k === "color") o[k] = typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v) ? v : null;
       else if (k === "mil_sources") o[k] = Array.isArray(v) ? v.filter(Array.isArray).map((s) => [str(s[0]), numOr0(s[1]), numOr0(s[2])]) : [];
       else if (k === "institutions") o[k] = Array.isArray(v) ? v.map(str).filter((x) => /^\w{1,60}$/.test(x)) : [];
-      else if (["goods", "raw", "ranks", "score", "inst_presence"].includes(k)) o[k] = numMap(v);
-      else if (k.endsWith("_hist")) o[k] = numList(v);
+      else if (["goods", "raw", "ranks", "score", "inst_presence", "adv_by_inst", "research_by_inst"].includes(k)) o[k] = numMap(v);
+      else if (k.endsWith("_hist") || k === "adv_by_age") o[k] = numList(v);
       else o[k] = numOr0(v);
     }
     for (const k of STR) if (!(k in o)) o[k] = "";

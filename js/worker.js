@@ -72,6 +72,84 @@ const STARTING_ADVANCES = {
   three_sisters: 1, medicinal_infusions: 2, system_of_tributaries: 4, valley_irrigation: 4,
 };
 
+/* Every advance in the game files: {ages: [age ids], adv: {name: [age index,
+   research_cost, institution it hangs from or "", starting_technology_level
+   or 0]}}. An advance hangs from an institution when it, or one it requires,
+   is only allowed once that institution is embraced. Takes the files' text. */
+function advanceTable(texts) {
+  const AGES = ["age_1_traditions", "age_2_renaissance", "age_3_discovery", "age_4_reformation",
+    "age_5_absolutism", "age_6_revolutions"];
+  const def = new Map();
+  for (const txt of texts) {
+    const clean = txt.replace(/#[^\n]*/g, "");
+    for (const m of clean.matchAll(/^(\w+)\s*=\s*\{([\s\S]*?)^\}/gm)) {
+      const b = m[2];
+      const age = AGES.indexOf((b.match(/^\s*age\s*=\s*(\w+)/m) || [])[1]);
+      if (age < 0) continue;
+      const allow = b;
+      def.set(m[1], {
+        age,
+        cost: parseFloat((b.match(/^\s*research_cost\s*=\s*(-?[\d.]+)/m) || [0, 0])[1]) || 0,
+        req: [...b.matchAll(/^\s*requires\s*=\s*(\w+)/gm)].map((x) => x[1]),
+        inst: (allow.match(/has_embraced_institution\s*=\s*institution:(\w+)/) || [])[1] || "",
+        start: parseInt((b.match(/^\s*starting_technology_level\s*=\s*(\d+)/m) || [0, 0])[1], 10) || 0,
+      });
+    }
+  }
+  const root = new Map();
+  const instOf = (k, seen = new Set()) => {
+    if (root.has(k)) return root.get(k);
+    const d = def.get(k);
+    if (!d || seen.has(k)) return "";
+    seen.add(k);
+    let r = d.inst;
+    for (const q of d.req) { if (r) break; r = instOf(q, seen); }
+    root.set(k, r);
+    return r;
+  };
+  const adv = {};
+  for (const [k, d] of def) adv[k] = [d.age, d.cost, instOf(k), d.start];
+  return { ages: AGES, adv };
+}
+
+async function loadAdvanceTable(fs) {
+  const dir = "in_game/common/advances";
+  const names = await fs.list(dir);
+  if (!names) return null;
+  const texts = [];
+  for (const fn of pySort(names)) if (fn.endsWith(".txt")) texts.push((await fs.text(dir + "/" + fn)) || "");
+  const t = advanceTable(texts);
+  return Object.keys(t.adv).length ? t : null;
+}
+
+/* Research an advance costs: the game's base cost, raised 15% an age, times
+   (1 + the advance's research_cost). An estimate: the base is reset when the
+   game loads its advances, and advances of an earlier age cost less. */
+const RESEARCH_BASE = 25, RESEARCH_AGE_STEP = 0.15;
+const advanceCost = (age, add) => RESEARCH_BASE * Math.pow(1 + RESEARCH_AGE_STEP, age) * Math.max(0, 1 + add);
+
+/* Per country: advances researched per age and per institution, and the
+   research they cost (leaving out the ones it started the game with). */
+function attachAdvanceStats(rows, table) {
+  for (const r of rows) {
+    const done = r._researched, level = r._startLevel;
+    if (!done || !table) continue;
+    const byAge = [0, 0, 0, 0, 0, 0], byInst = {}, costInst = {};
+    let paid = 0;
+    for (const a of done) {
+      const d = table.adv[a];
+      if (!d) continue;
+      byAge[d[0]]++;
+      const free = d[0] === 0 && d[3] && level != null && d[3] <= level;
+      const c = free ? 0 : advanceCost(d[0], d[1]);
+      paid += c;
+      if (d[2]) { byInst[d[2]] = (byInst[d[2]] || 0) + 1; costInst[d[2]] = (costInst[d[2]] || 0) + c; }
+    }
+    for (const k of Object.keys(costInst)) costInst[k] = Math.round(costInst[k]);
+    Object.assign(r, { adv_by_age: byAge, adv_by_inst: byInst, research_by_inst: costInst, research_paid: Math.round(paid) });
+  }
+}
+
 async function loadStartingAdvances(fs) {
   const dir = "in_game/common/advances";
   const names = await fs.list(dir);
@@ -1101,7 +1179,9 @@ async function buildPack(fs) {
   rc.getContext("2d").putImageData(new ImageData(raster, RW, rc.height), 0, 0);
   const rasterPng = await (await rc.convertToBlob({ type: "image/png" })).arrayBuffer();
   log(`pack: ${Object.keys(flags).length} flags of ${tags.size} country tags, ${map.locations.length - 1} locations, ${Object.keys(map.tags).length} tag colours`);
-  return { flags, map, png, raster: rasterPng };
+  stage("Reading the advances…");
+  const advances = await loadAdvanceTable(fs);
+  return { flags, map, png, raster: rasterPng, advances };
 }
 
 async function buildMapData(data, sections, save, msrc) {
@@ -1976,11 +2056,17 @@ self.onmessage = async (e) => {
     if (!data.rows.length) log("no player nations found in this save");
 
     const fs = await resolveGame(game);
-    attachAdvanceGains(data.rows, (fs && (await loadStartingAdvances(fs))) || STARTING_ADVANCES);
     if (game && !fs) log("the linked folder doesn't look like an EU5 install - using the hosted game data instead");
-    // Flags and map come from the linked install when there is one, else from
-    // the hosted game-data pack for the save's version (or the newest pack).
-    const pack = !fs && (opts.flags || opts.map) ? await choosePack(w.version) : null;
+    // Flags, map and the advance table come from the linked install when
+    // there is one, else from the hosted game-data pack for the save's
+    // version (or the newest pack).
+    const anyPack = fs ? null : await choosePack(w.version);
+    let advT = fs ? await loadAdvanceTable(fs) : null;
+    if (!advT && anyPack) advT = await packFetch(anyPack, "advances.json", "json").catch(() => null);
+    attachAdvanceStats(data.rows, advT);
+    const starts = advT ? Object.fromEntries(Object.entries(advT.adv).filter(([, d]) => d[0] === 0 && d[3]).map(([k, d]) => [k, d[3]])) : null;
+    attachAdvanceGains(data.rows, starts || (fs && (await loadStartingAdvances(fs))) || STARTING_ADVANCES);
+    const pack = opts.flags || opts.map ? anyPack : null;
     if (pack) {
       log(`using ${pack.label}` + (pack.exact ? "" : ` (no pack for ${w.version})`));
       w.game_data = { source: "pack", version: pack.version, name: pack.name || null,

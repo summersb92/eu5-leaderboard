@@ -209,6 +209,8 @@ table.mat.inst th.good{min-width:190px}
 .cell.ready::after{content:" \2022"; color:var(--accent)}
 .ilog{display:flex; flex-wrap:wrap; gap:4px; justify-content:center; padding:6px}
 .ilog .chip{font-size:11px; padding:1px 6px; color:var(--verd); border-color:currentColor}
+.isub{display:block; margin-top:-5px; padding:0 4px 6px; font:500 10.5px/1.2 "IBM Plex Mono",Menlo,monospace; color:var(--ink-3)}
+.ilog .isub{flex-basis:100%; margin:0; padding:2px 0 0}
 .mapdetails summary::-webkit-details-marker{display:none}
 .mapdetails summary:hover h2{color:var(--accent)}
 .mapdetails .car{opacity:.6; font-size:13px; color:var(--ink-3); transition:transform .15s}
@@ -498,6 +500,8 @@ const SPEC={
   locations:{fmt:r=>r.locations}, provinces:{bar:false,fmt:r=>r.provinces},
   subunits:{bar:false,fmt:r=>r.subunits}, advances:{bar:false,fmt:r=>r.advances+(r.advances_gained==null||showDelta?"":' <span class="delta" title="since the game started">'+plus(r.advances_gained)+'</span>')},
   advances_gained:{bar:false,fmt:r=>r.advances_gained==null?dash:plus(r.advances_gained)},
+  research_paid:{tip:"Research spent on the advances learned, leaving out those the nation started with (estimated)",
+    fmt:r=>r.research_paid==null?dash:int(r.research_paid)},
   n_institutions:{bar:false,tip:"Institutions embraced",
     fmt:r=>'<span title="'+esc((r.institutions||[]).map(instName).join(", ")||"none")+'">'+int(r.n_institutions)+'</span>'},
   wars:{bar:false,fmt:r=>r.wars}, rebels:{bar:false,fmt:r=>r.rebels},
@@ -898,7 +902,7 @@ function chartPng(svg,title,sub){
     {k:"taxbase",t:"Tax base",hist:"tax_hist"},
     {k:"econbase",t:"Econ base",hist:"econ_hist"},
     {k:"income",t:"Income"},{k:"locations",t:"Locations"},{k:"dev",t:"Development"},
-    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"discipline_est",t:"Discipline (est.)",fmt:v=>bonus(v)},{k:"levy_combat_est",t:"Levy combat (est.)",fmt:v=>bonus(v)},{k:"advances",t:"Advances"},{k:"n_institutions",t:"Institutions"},{k:"gold",t:"Gold"},{k:"debt",t:"Debt"},{k:"debt_cost",t:"Debt cost / month"},
+    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"discipline_est",t:"Discipline (est.)",fmt:v=>bonus(v)},{k:"levy_combat_est",t:"Levy combat (est.)",fmt:v=>bonus(v)},{k:"advances",t:"Advances"},{k:"n_institutions",t:"Institutions"},{k:"research_paid",t:"Research paid (est.)"},{k:"gold",t:"Gold"},{k:"debt",t:"Debt"},{k:"debt_cost",t:"Debt cost / month"},
     {k:"prestige",t:"Prestige"},{k:"gp_rank",t:"Great-power rank",invert:true}
   ];
   const num=v=>{const a=Math.abs(v); return a>=1000?int(v):a>=100?String(Math.round(v)):a>=10?String(+v.toFixed(1)):String(+v.toFixed(2));};
@@ -1396,7 +1400,7 @@ const XL=(function(){
 /* How each field goes into a spreadsheet: real units, not the page's
    rounded text (population and troops in people, not thousands). */
 const MEN=new Set(["army","levies","regulars","mercs","manpower","max_manpower","sailors","max_sailors","levies_potential"]);
-const WHOLE=new Set(["n_institutions","loans","bonds","locations","provinces","subunits","advances","advances_gained","wars","rebels","merc_companies",
+const WHOLE=new Set(["n_institutions","research_paid","loans","bonds","locations","provinces","subunits","advances","advances_gained","wars","rebels","merc_companies",
   "navy","navy_levies","navy_regulars","navy_mercs","score_place","kills","war_battle","war_attrition","gold","dev","debt"]);
 function xlCol(k){
   const t=FIELDS[k]||k;
@@ -1794,26 +1798,40 @@ const LIVE=(function(){
   $("instrange").textContent=act.length+" of "+IN.length+" have appeared";
   $("instnote").innerHTML='&#10003; embraced. Otherwise, the share of the nation&rsquo;s people exposed to it so far: '
     +'at 20% it can be embraced (marked &bull;), and it gets cheaper the further it has spread. Institutions that '
-    +'haven&rsquo;t appeared anywhere yet are left out.';
+    +'haven&rsquo;t appeared anywhere yet are left out. Under each &#10003;: the advances learned from that institution '
+    +'and the research they cost. <em>Advances</em> counts every advance learned, and <em>research paid</em> what they cost, '
+    +'leaving out the ones the nation started with. The save doesn&rsquo;t record research costs, so they&rsquo;re estimated '
+    +'from the game&rsquo;s cost rules: 25 research, 15% more each age, times the advance&rsquo;s own multiplier. '
+    +'Advances researched after their age cost less in game, so this can run high.';
+  const hasAdv=R.some(r=>r.adv_by_inst);
   // age headings over their institutions
   let ages='', run=null, span=0;
   const flush=()=>{ if(span) ages+='<th colspan="'+span+'">'+esc(run?"Age of "+run:"")+'</th>'; };
   act.forEach(k=>{const a=ageOf(k); if(a!==run){flush(); run=a; span=0;} span++;});
   flush();
-  let h='<thead><tr class="ages"><th class="good"></th>'+ages+'<th></th></tr><tr><th class="good" style="text-align:left">Nation</th>'
-    +act.map(k=>'<th>'+esc(instName(k))+'</th>').join("")+'<th>Embraced</th></tr></thead><tbody>';
+  let h='<thead><tr class="ages"><th class="good"></th>'+ages+'<th colspan="'+(hasAdv?3:1)+'"></th></tr><tr><th class="good" style="text-align:left">Nation</th>'
+    +act.map(k=>'<th>'+esc(instName(k))+'</th>').join("")+'<th>Embraced</th>'
+    +(hasAdv?'<th>Advances</th><th>Research paid (est.)</th>':'')+'</tr></thead><tbody>';
   rows.forEach(r=>{
     const has=new Set(r.institutions||[]), pr=r.inst_presence||{};
     h+='<tr>'+natTh(r);
     act.forEach(k=>{
-      if(has.has(k)){ h+='<td style="background:color-mix(in srgb, var(--verd) 22%, transparent)" title="'+esc(instName(k))+': embraced"><span class="cell yes">&#10003;</span></td>'; return; }
+      if(has.has(k)){
+        const n=N((r.adv_by_inst||{})[k]), c=N((r.research_by_inst||{})[k]);
+        h+='<td style="background:color-mix(in srgb, var(--verd) 22%, transparent)" title="'+esc(instName(k))+': embraced'
+          +(r.adv_by_inst?', '+n+' advance'+(n===1?'':'s')+' learned from it, about '+int(c)+' research':'')+'">'
+          +'<span class="cell yes">&#10003;</span>'+(r.adv_by_inst?'<span class="isub">'+n+' adv &middot; '+int(c)+'</span>':'')+'</td>';
+        return;
+      }
       const v=N(pr[k]);
       const a=v?Math.round((0.08+0.5*v)*100):0;
       h+='<td'+(v?' style="background:color-mix(in srgb, var(--accent) '+a+'%, transparent)"':'')
         +' title="'+esc(instName(k))+': '+(v*100).toFixed(1)+'% of people exposed'+(v>=0.2?", can be embraced":"")+'">'
         +'<span class="cell'+(v?'':' e')+(v>=0.2?' ready':'')+'">'+(v?(v*100).toFixed(0)+'%':'&middot;')+'</span></td>';
     });
-    h+='<td><span class="cell tot">'+int(r.n_institutions)+'</span></td></tr>';
+    h+='<td><span class="cell tot">'+int(r.n_institutions)+'</span></td>';
+    if(hasAdv) h+='<td><span class="cell">'+int(r.advances)+'</span></td><td><span class="cell">'+(r.research_paid==null?'&middot;':int(r.research_paid))+'</span></td>';
+    h+='</tr>';
   });
   $("insttab").innerHTML=h+'</tbody>';
 
@@ -1827,14 +1845,18 @@ const LIVE=(function(){
     rows.forEach(r=>{
       g+='<tr>'+natTh(r);
       const first=snaps[0].rows.find(x=>x.id===r.id);
-      g+='<td><span class="cell'+(first?'':' e')+'">'+(first?int((first.institutions||[]).length):'&middot;')+'</span></td>';
+      g+='<td><span class="cell'+(first?'':' e')+'">'+(first?int((first.institutions||[]).length)+' embraced':'&middot;')+'</span>'
+        +(first&&first.advances!=null?'<span class="isub">'+int(first.advances)+' adv'+(first.research_paid!=null?' &middot; '+int(first.research_paid):'')+'</span>':'')+'</td>';
       pairs.forEach(([a,b])=>{
         const x=a.rows.find(q=>q.id===r.id), y=b.rows.find(q=>q.id===r.id);
         if(!y){ g+='<td><span class="cell e">&middot;</span></td>'; return; }
         const before=new Set((x&&x.institutions)||[]);
         const got=(y.institutions||[]).filter(k=>!before.has(k));
-        g+='<td>'+(got.length?'<div class="ilog">'+got.map(k=>'<span class="chip">+'+esc(instName(k))+'</span>').join("")+'</div>'
-          :'<span class="cell e">'+(x?'none':'&middot;')+'</span>')+'</td>';
+        const dAdv=x?N(y.advances)-N(x.advances):null;
+        const dRes=x&&x.research_paid!=null&&y.research_paid!=null?N(y.research_paid)-N(x.research_paid):null;
+        const sub=dAdv==null?'':'<span class="isub">'+plus(dAdv)+' adv'+(dRes==null?'':' &middot; '+plus(dRes)+' research')+'</span>';
+        g+='<td>'+(got.length?'<div class="ilog">'+got.map(k=>'<span class="chip">+'+esc(instName(k))+'</span>').join("")+sub+'</div>'
+          :'<span class="cell e">'+(x?'none':'&middot;')+'</span>'+sub)+'</td>';
       });
       g+='</tr>';
     });
@@ -1848,7 +1870,8 @@ const LIVE=(function(){
     const lines=rows.map(r=>{
       const has=new Set(r.institutions||[]), pr=r.inst_presence||{};
       const cells=act.map(k=>" "+(has.has(k)?"ok":N(pr[k])?Math.round(N(pr[k])*100)+"%":"-").padStart(5));
-      let x=r.tag.padEnd(4)+cells.join("")+String(int(r.n_institutions)).padStart(3);
+      let x=r.tag.padEnd(4)+cells.join("")+String(int(r.n_institutions)).padStart(3)
+        +(hasAdv?String(int(r.advances)).padStart(5)+(r.research_paid==null?"-":int(r.research_paid)).padStart(9):"");
       if(last){
         const a=last[0].rows.find(q=>q.id===r.id), b=last[1].rows.find(q=>q.id===r.id);
         const before=new Set((a&&a.institutions)||[]);
@@ -1857,8 +1880,8 @@ const LIVE=(function(){
       }
       return x;
     });
-    const headRow="    "+act.map(k=>" "+abbr(k).padStart(5)).join("")+"  #"+(last?"  new since "+last[0].date:"");
-    const head="**Institutions · "+W.date+"**  ·  ok = embraced, % = people exposed (20% to embrace)";
+    const headRow="    "+act.map(k=>" "+abbr(k).padStart(5)).join("")+"  #"+(hasAdv?"  Adv   Rsrch~":"")+(last?"  new since "+last[0].date:"");
+    const head="**Institutions · "+W.date+"**  ·  ok = embraced, % = people exposed (20% to embrace)"+(hasAdv?", Adv = advances learned, Rsrch~ = research paid (est.)":"");
     let n=lines.length, out;
     do { out=head+"\n```\n"+[headRow,...lines.slice(0,n)].join("\n")+"\n```"; n--; } while(out.length>2000&&n>0);
     return out;
