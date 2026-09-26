@@ -198,6 +198,17 @@ table.mat tbody tr:hover th.good{color:var(--accent)}
 .cell.e{color:var(--ink-3); opacity:.35}
 .tot{font-size:11px; color:var(--ink-3)}
 .mapdetails summary{cursor:pointer; list-style:none}
+/* institutions */
+table.mat.inst{min-width:0}
+table.mat.inst thead tr.ages th{cursor:default; font-size:10px; letter-spacing:.12em; color:var(--ink-3);
+  border-bottom:1px solid var(--line-soft); padding:7px 6px 4px}
+table.mat.inst thead th{cursor:default; white-space:normal; min-width:74px; line-height:1.25}
+table.mat.inst th.good{min-width:190px}
+.cell.yes{color:var(--verd); font-weight:700}
+.cell.ready{font-weight:700}
+.cell.ready::after{content:" \2022"; color:var(--accent)}
+.ilog{display:flex; flex-wrap:wrap; gap:4px; justify-content:center; padding:6px}
+.ilog .chip{font-size:11px; padding:1px 6px; color:var(--verd); border-color:currentColor}
 .mapdetails summary::-webkit-details-marker{display:none}
 .mapdetails summary:hover h2{color:var(--accent)}
 .mapdetails .car{opacity:.6; font-size:13px; color:var(--ink-3); transition:transform .15s}
@@ -283,6 +294,22 @@ footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); colo
       <span class="eyebrow" style="margin:0">click a column to sort by its change</span></div>
     <div class="tablewrap"><table id="chg"></table></div>
   </div>
+</section>
+
+<section id="instsec" hidden>
+  <div class="sechead"><h2>Institutions</h2><span class="rule"></span><span class="eyebrow" style="margin:0" id="instrange"></span></div>
+  <p class="note" id="instnote"></p>
+  <div class="matwrap"><table class="mat inst" id="insttab"></table></div>
+  <div id="instchg" hidden>
+    <div class="chghead"><h3>Embraced each session</h3>
+      <span class="eyebrow" style="margin:0">what each nation took up between one save and the next</span></div>
+    <div class="matwrap"><table class="mat inst" id="instlog"></table></div>
+  </div>
+  <div class="mapactions">
+    <button class="btn" id="insttxt" type="button">Copy for Discord (text)</button>
+  </div>
+  <details class="copywrap"><summary>&#9656; Show the Discord text</summary>
+    <textarea id="insttext" readonly spellcheck="false"></textarea></details>
 </section>
 
 <section id="mapsec" hidden>
@@ -471,9 +498,19 @@ const SPEC={
   locations:{fmt:r=>r.locations}, provinces:{bar:false,fmt:r=>r.provinces},
   subunits:{bar:false,fmt:r=>r.subunits}, advances:{bar:false,fmt:r=>r.advances+(r.advances_gained==null||showDelta?"":' <span class="delta" title="since the game started">'+plus(r.advances_gained)+'</span>')},
   advances_gained:{bar:false,fmt:r=>r.advances_gained==null?dash:plus(r.advances_gained)},
+  n_institutions:{bar:false,tip:"Institutions embraced",
+    fmt:r=>'<span title="'+esc((r.institutions||[]).map(instName).join(", ")||"none")+'">'+int(r.n_institutions)+'</span>'},
   wars:{bar:false,fmt:r=>r.wars}, rebels:{bar:false,fmt:r=>r.rebels},
   score_place:{bar:false,asc:true,fmt:r=>"#"+int(r.score_place)}
 };
+/* Institution names, in the game's order: three per age. */
+const INST_NAMES={feudalism:"Feudalism",legalism:"Legalism",meritocracy:"Meritocracy",renaissance:"Renaissance",
+  banking:"Banking",professional_armies:"Professional Armies",new_world:"New World",printing_press:"Printing Press",
+  pike_and_shot:"Pike and Shot",confessionalism:"Confessionalism",global_trade:"Global Trade",
+  artillery_institution:"Artillery",manufactories:"Manufactories",scientific_revolution:"Scientific Revolution",
+  military_revolution:"Military Revolution",enlightenment:"Enlightenment",industrialization:"Industrialization",
+  levee_en_masse:"Lev\u00e9e en Masse"};
+const instName=k=>INST_NAMES[k]||String(k).replace(/_/g," ").replace(/^./,c=>c.toUpperCase());
 const RANKED=new Set(["pop","taxbase","econbase","wealth","control","dev","locations",
                       "gold","income","total_produced","trade_value","army","levies",
                       "regulars","mercs","kills"]);
@@ -596,6 +633,11 @@ function detailPanel(r){
       +kv("ADM / DIP / MIL",f1(r.score.ADM)+" / "+f1(r.score.DIP)+" / "+f1(r.score.MIL))
       +kv("Prestige",f1(r.prestige))+kv("Stability",f1(r.stability))
       +kv("Government power",f1(r.govpower))+kv("Advances",r.advances+(r.advances_gained==null?"":" ("+plus(r.advances_gained)+" since start)")))
+  + (W.institutions&&W.institutions.length?'<div class="grp full"><h4>Institutions &mdash; '+int(r.n_institutions)+' embraced</h4><div class="chips">'
+      + (r.institutions||[]).map(k=>'<span class="chip">'+esc(instName(k))+'<b>&#10003;</b></span>').join("")
+      + Object.entries(r.inst_presence||{}).map(([k,v])=>'<span class="chip" title="Share of the population exposed to it; 20% is enough to embrace it">'
+        +esc(instName(k))+'<b>'+(N(v)*100).toFixed(0)+'% exposed</b></span>').join("")
+      + '</div></div>':'')
   + '<div class="grp"><h4>Population by year, '+(Math.floor(Number(String(W.date).split(".")[0]))-r.pop_hist.length+1)+' onwards</h4>'
       + '<div style="padding-top:4px">'+sparkline(r.pop_hist,150,40)+'</div>'
       + '<div class="kv"><span>'+pop(r.pop_hist[0])+'</span><b>&rarr;</b><span>'+pop(r.pop_hist[r.pop_hist.length-1])+'</span></div></div>'
@@ -856,7 +898,7 @@ function chartPng(svg,title,sub){
     {k:"taxbase",t:"Tax base",hist:"tax_hist"},
     {k:"econbase",t:"Econ base",hist:"econ_hist"},
     {k:"income",t:"Income"},{k:"locations",t:"Locations"},{k:"dev",t:"Development"},
-    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"discipline_est",t:"Discipline (est.)",fmt:v=>bonus(v)},{k:"levy_combat_est",t:"Levy combat (est.)",fmt:v=>bonus(v)},{k:"advances",t:"Advances"},{k:"gold",t:"Gold"},{k:"debt",t:"Debt"},{k:"debt_cost",t:"Debt cost / month"},
+    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"discipline_est",t:"Discipline (est.)",fmt:v=>bonus(v)},{k:"levy_combat_est",t:"Levy combat (est.)",fmt:v=>bonus(v)},{k:"advances",t:"Advances"},{k:"n_institutions",t:"Institutions"},{k:"gold",t:"Gold"},{k:"debt",t:"Debt"},{k:"debt_cost",t:"Debt cost / month"},
     {k:"prestige",t:"Prestige"},{k:"gp_rank",t:"Great-power rank",invert:true}
   ];
   const num=v=>{const a=Math.abs(v); return a>=1000?int(v):a>=100?String(Math.round(v)):a>=10?String(+v.toFixed(1)):String(+v.toFixed(2));};
@@ -1354,7 +1396,7 @@ const XL=(function(){
 /* How each field goes into a spreadsheet: real units, not the page's
    rounded text (population and troops in people, not thousands). */
 const MEN=new Set(["army","levies","regulars","mercs","manpower","max_manpower","sailors","max_sailors","levies_potential"]);
-const WHOLE=new Set(["loans","bonds","locations","provinces","subunits","advances","advances_gained","wars","rebels","merc_companies",
+const WHOLE=new Set(["n_institutions","loans","bonds","locations","provinces","subunits","advances","advances_gained","wars","rebels","merc_companies",
   "navy","navy_levies","navy_regulars","navy_mercs","score_place","kills","war_battle","war_attrition","gold","dev","debt"]);
 function xlCol(k){
   const t=FIELDS[k]||k;
@@ -1735,6 +1777,100 @@ const LIVE=(function(){
     size(); fitPlayers(); buildPalette(); loop();
   }).catch(err=>{ box.hidden=true; console.warn("interactive map unavailable:",err); });
   return { canvas:cv };
+})();
+
+/* ---- institutions: who has embraced what, how far the rest have spread,
+   and (with several saves) what each nation took up in each session ---- */
+(function(){
+  const IN=(W.institutions||[]);
+  const act=IN.filter(i=>i.active).map(i=>i.key);
+  if(!act.length||!R.some(r=>Array.isArray(r.institutions))) return;
+  $("instsec").hidden=false;
+  const AGES=["Traditions","Renaissance","Discovery","Reformation","Absolutism","Revolutions"];
+  const ageOf=k=>{const i=IN.findIndex(x=>x.key===k); return i<0?"":AGES[Math.floor(i/3)]||"";};
+  const rows=[...R].sort((a,b)=>N(b.n_institutions)-N(a.n_institutions)||a.gp_rank-b.gp_rank);
+  const natTh=r=>'<th class="good"><span class="tag">'+esc(r.tag)+'</span> '+esc(r.name)
+    +(r.is_player?' <span class="player">'+esc(r.player)+'</span>':' <span class="player ai">AI</span>')+'</th>';
+  $("instrange").textContent=act.length+" of "+IN.length+" have appeared";
+  $("instnote").innerHTML='&#10003; embraced. Otherwise, the share of the nation&rsquo;s people exposed to it so far: '
+    +'at 20% it can be embraced (marked &bull;), and it gets cheaper the further it has spread. Institutions that '
+    +'haven&rsquo;t appeared anywhere yet are left out.';
+  // age headings over their institutions
+  let ages='', run=null, span=0;
+  const flush=()=>{ if(span) ages+='<th colspan="'+span+'">'+esc(run?"Age of "+run:"")+'</th>'; };
+  act.forEach(k=>{const a=ageOf(k); if(a!==run){flush(); run=a; span=0;} span++;});
+  flush();
+  let h='<thead><tr class="ages"><th class="good"></th>'+ages+'<th></th></tr><tr><th class="good" style="text-align:left">Nation</th>'
+    +act.map(k=>'<th>'+esc(instName(k))+'</th>').join("")+'<th>Embraced</th></tr></thead><tbody>';
+  rows.forEach(r=>{
+    const has=new Set(r.institutions||[]), pr=r.inst_presence||{};
+    h+='<tr>'+natTh(r);
+    act.forEach(k=>{
+      if(has.has(k)){ h+='<td style="background:color-mix(in srgb, var(--verd) 22%, transparent)" title="'+esc(instName(k))+': embraced"><span class="cell yes">&#10003;</span></td>'; return; }
+      const v=N(pr[k]);
+      const a=v?Math.round((0.08+0.5*v)*100):0;
+      h+='<td'+(v?' style="background:color-mix(in srgb, var(--accent) '+a+'%, transparent)"':'')
+        +' title="'+esc(instName(k))+': '+(v*100).toFixed(1)+'% of people exposed'+(v>=0.2?", can be embraced":"")+'">'
+        +'<span class="cell'+(v?'':' e')+(v>=0.2?' ready':'')+'">'+(v?(v*100).toFixed(0)+'%':'&middot;')+'</span></td>';
+    });
+    h+='<td><span class="cell tot">'+int(r.n_institutions)+'</span></td></tr>';
+  });
+  $("insttab").innerHTML=h+'</tbody>';
+
+  // Sessions: consecutive saves that both recorded institutions.
+  const snaps=TL.filter(s=>s.rows.some(x=>Array.isArray(x.institutions)));
+  if(snaps.length>=2){
+    $("instchg").hidden=false;
+    const pairs=snaps.slice(1).map((s,i)=>[snaps[i],s]);
+    let g='<thead><tr><th class="good" style="text-align:left">Nation</th><th>By '+esc(snaps[0].date)+'</th>'
+      +pairs.map(([a,b])=>'<th>'+esc(a.date)+' &rarr; '+esc(b.date)+'</th>').join("")+'</tr></thead><tbody>';
+    rows.forEach(r=>{
+      g+='<tr>'+natTh(r);
+      const first=snaps[0].rows.find(x=>x.id===r.id);
+      g+='<td><span class="cell'+(first?'':' e')+'">'+(first?int((first.institutions||[]).length):'&middot;')+'</span></td>';
+      pairs.forEach(([a,b])=>{
+        const x=a.rows.find(q=>q.id===r.id), y=b.rows.find(q=>q.id===r.id);
+        if(!y){ g+='<td><span class="cell e">&middot;</span></td>'; return; }
+        const before=new Set((x&&x.institutions)||[]);
+        const got=(y.institutions||[]).filter(k=>!before.has(k));
+        g+='<td>'+(got.length?'<div class="ilog">'+got.map(k=>'<span class="chip">+'+esc(instName(k))+'</span>').join("")+'</div>'
+          :'<span class="cell e">'+(x?'none':'&middot;')+'</span>')+'</td>';
+      });
+      g+='</tr>';
+    });
+    $("instlog").innerHTML=g+'</tbody>';
+  }
+
+  // Discord: a fixed-width table of what each nation has, and the session's new ones.
+  const abbr=k=>instName(k).split(" ").map(w=>w.slice(0,3)).join("").slice(0,5);
+  function instText(){
+    const last=snaps.length>=2?[snaps[snaps.length-2],snaps[snaps.length-1]]:null;
+    const lines=rows.map(r=>{
+      const has=new Set(r.institutions||[]), pr=r.inst_presence||{};
+      const cells=act.map(k=>" "+(has.has(k)?"ok":N(pr[k])?Math.round(N(pr[k])*100)+"%":"-").padStart(5));
+      let x=r.tag.padEnd(4)+cells.join("")+String(int(r.n_institutions)).padStart(3);
+      if(last){
+        const a=last[0].rows.find(q=>q.id===r.id), b=last[1].rows.find(q=>q.id===r.id);
+        const before=new Set((a&&a.institutions)||[]);
+        const got=b?(b.institutions||[]).filter(k=>!before.has(k)):[];
+        if(got.length) x+="  +"+got.map(abbr).join(" +");
+      }
+      return x;
+    });
+    const headRow="    "+act.map(k=>" "+abbr(k).padStart(5)).join("")+"  #"+(last?"  new since "+last[0].date:"");
+    const head="**Institutions · "+W.date+"**  ·  ok = embraced, % = people exposed (20% to embrace)";
+    let n=lines.length, out;
+    do { out=head+"\n```\n"+[headRow,...lines.slice(0,n)].join("\n")+"\n```"; n--; } while(out.length>2000&&n>0);
+    return out;
+  }
+  const txt=instText();
+  $("insttext").value=txt;
+  $("insttxt").onclick=async function(){
+    const btn=this, lbl=btn.textContent;
+    try{ await navigator.clipboard.writeText(txt); btn.textContent="Copied"; btn.classList.add("ok"); }
+    catch(e){ const t=$("insttext"); t.closest("details").open=true; t.select(); btn.textContent="Press Ctrl+C"; }
+    setTimeout(()=>{btn.textContent=lbl; btn.classList.remove("ok");},2200);
+  };
 })();
 
 /* ---- goods matrix: sortable by any column ---- */

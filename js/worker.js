@@ -147,6 +147,24 @@ function totalMilitary(src) {
   return { discipline_est: d, levy_combat_est: l };
 }
 
+/* {institutions: [embraced, in age order], n_institutions,
+    inst_presence: {institution: share of people exposed}} for one country.
+   Presence is kept for institutions that have appeared but aren't embraced. */
+function institutionFigures(c, exposed, people, order) {
+  const has = get(c, "institutions");
+  const got = new Set();
+  if (isDict(has)) for (const [k, v] of has) if (v === "yes") got.add(k);
+  const known = order.map((i) => i.key);
+  const list = [...known.filter((k) => got.has(k)), ...[...got].filter((k) => !known.includes(k))];
+  const presence = {};
+  for (const i of order) {
+    if (!i.active || got.has(i.key)) continue;
+    const v = exposed && people ? exposed.val(i.key) / people : 0;
+    presence[i.key] = Math.round(v * 1000) / 1000;
+  }
+  return { institutions: list, n_institutions: list.length, inst_presence: presence };
+}
+
 /* Ruler traits live in character_db; look up just the rulers shown. */
 async function attachRulerTraits(rows, save, sections) {
   const want = new Map(rows.filter((r) => r._ruler).map((r) => [r._ruler, r]));
@@ -1501,7 +1519,7 @@ async function extract(save, sections, topAi = 0) {
     "last_months_foreign_building_income monthly_trade_balance " +
     "monthly_trade_value last_month_gold_income " +
     "total_produced max_manpower max_sailors researched_advances starting_technology_level " +
-    "last_months_army_maintenance last_months_navy_maintenance").split(" ");
+    "last_months_army_maintenance last_months_navy_maintenance institutions").split(" ");
   const BLK = ("score currency_data economy counters last_month_produced historical_population " +
     "historical_tax_base historical_economical_base owned_locations provinces " +
     "variables government timed_modifiers").split(" ");
@@ -1587,6 +1605,7 @@ async function extract(save, sections, topAi = 0) {
           dev: dv ? parseFloat(dv[1]) : 0, control: ct ? parseFloat(ct[1]) : 0,
           tax: tx ? parseFloat(tx[1]) : 0, ptax: pt ? parseFloat(pt[1]) : 0,
           prosp: f(/\n\t\t\tprosperity=([\d.]+)/),
+          inst: (part.match(/\n\t\t\tinstitutions=\{([^}]*)\}/) || [0, ""])[1],
           pops: pp ? pp[1].trim().split(/\s+/) : [],
         });
       }
@@ -1605,6 +1624,23 @@ async function extract(save, sections, topAi = 0) {
       l.pop = s;
       delete l.pops;
     }
+  }
+  // Institution presence: the share of each country's people exposed to it
+  // (a location's value is the percentage of its pops exposed).
+  const instPop = new Map(), instTot = new Counter();
+  for (const l of locRecs) {
+    const p = l.pop || 0;
+    instTot.add(l.owner, p);
+    if (!instPop.has(l.owner)) instPop.set(l.owner, new Counter());
+    for (const m of l.inst.matchAll(/(\w+)=([\d.]+)/g)) instPop.get(l.owner).add(m[1], p * Math.min(100, parseFloat(m[2])) / 100);
+    delete l.inst;
+  }
+  // The institutions of each age, in order, and which have appeared yet.
+  const institutions = [];
+  if (sections.has("institution_manager")) {
+    const itext = await readSpan(save, ...sections.get("institution_manager")[0]);
+    for (const m of itext.matchAll(/\n\t\t(\w+)=\{([^}]*)\}/g))
+      institutions.push({ key: m[1], active: /\bactive=yes/.test(m[2]) });
   }
 
   // ---- subunits: standing army / navy ----------------------------------
@@ -1836,6 +1872,7 @@ async function extract(save, sections, topAi = 0) {
       levies: levies.val(cid), regulars: regulars.val(cid),
       mercs: mercs.val(cid), merc_companies: (companies.get(cid) || new Set()).size,
       levies_potential: levyPot.val(cid),
+      ...institutionFigures(c, instPop.get(cid), instTot.val(cid), institutions),
       ...estimateMilitary(c, get(dictOr(get(c, "government")), "ruler")),
       army_morale: weight.a.val(cid) ? moraleW.a.val(cid) / weight.a.val(cid) : 0,
       army_exp: weight.a.val(cid) ? expW.a.val(cid) / weight.a.val(cid) : 0,
@@ -1885,7 +1922,7 @@ async function extract(save, sections, topAi = 0) {
     world_locations: own.total(),
     date, version, multiplayer: mp, you: youTag, playthrough,
     n_players: players.size, wars_live: nWars,
-    save: save.name,
+    save: save.name, institutions,
   };
   return { rows, world, locmap };
 }

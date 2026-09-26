@@ -92,6 +92,15 @@ location's pops. After a game patch, regenerate the table with
 `py tools/extract_military_modifiers.py` and paste it over `MIL_SOURCES` in
 `js/worker.js`.
 
+## Institutions
+
+The report shows which institutions each nation has embraced and, for each
+one that has appeared somewhere but it hasn't embraced, the share of its
+people exposed to it: the save keeps each location's exposure, weighted here
+by population. 20% exposure is enough to embrace one. With several saves, a
+table shows what each nation embraced between one save and the next, and
+**Over time** charts the count.
+
 ## Running locally
 
 The page fetches its report template, so serve it over HTTP rather than
