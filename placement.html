@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EU5 Capital Finder</title>
+<meta name="description" content="Find where a Europa Universalis V nation's capital and local governors do the most good, from a save, entirely in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏛️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/placement.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <p class="eyebrow"><span>Europa Universalis V</span><span><a href="./">&larr; Leaderboard</a></span></p>
+    <h1>Capital &amp; governor finder</h1>
+    <p class="lede">Drop in a save, pick a nation, and see where its <strong>capital</strong> and
+      <strong>local governors</strong> would spread the most proximity &mdash; and so the most control and tax.
+      It all runs in this page; <strong>your save is never uploaded</strong>.</p>
+  </header>
+
+  <main>
+    <section class="steps" aria-label="Load a save">
+      <div class="step" id="step-save">
+        <div class="stephead"><h2>Your save</h2></div>
+        <label class="drop" id="drop" tabindex="0">
+          <input type="file" id="saveinput" accept=".eu5" hidden>
+          <span class="dropmain">Drop a <code>.eu5</code> save here, or <u>choose one</u></span>
+          <span class="dropsub">It has to be written in debug mode, the same as for the
+            <a href="./#readable">leaderboard</a>. Usually in
+            <code class="path">Documents\Paradox Interactive\Europa Universalis V\save games</code></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="status" id="status" hidden aria-live="polite">
+      <div class="statusline">
+        <span class="spinner" id="spinner" aria-hidden="true"></span>
+        <span id="stagetext">Working…</span>
+        <span class="elapsed mono" id="elapsed"></span>
+      </div>
+      <progress class="bar" id="buildbar" max="1" value="0"></progress>
+      <div class="errorbox" id="errorbox" hidden></div>
+      <details class="logbox"><summary>Details</summary><pre id="log"></pre></details>
+    </section>
+  </main>
+
+  <section class="result" id="result" hidden>
+    <div class="controls">
+      <label class="ctl ctlnation"><span>Nation</span><select id="nation"></select></label>
+      <label class="ctl"><span>Governors to place</span>
+        <select id="govs"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
+      <label class="chk"><input type="checkbox" id="eligible" checked> Only where one can be built now
+        <small>(a city with a road to the capital)</small></label>
+      <label class="chk" id="pendingrow"><input type="checkbox" id="pending" checked> Count governors being built as finished</label>
+    </div>
+    <p class="savename mono" id="savename"></p>
+
+    <div class="tiles" id="tiles"></div>
+    <p class="fitnote" id="fitnote"></p>
+
+    <div class="cards">
+      <article class="card">
+        <header><h2>Local governors</h2><p class="sub" id="govsub"></p></header>
+        <ol class="plan" id="govplan"></ol>
+        <details class="more"><summary>Every candidate, one governor at a time</summary>
+          <div class="tablewrap"><table class="rank" id="govtable"></table></div></details>
+      </article>
+      <article class="card">
+        <header><h2>Moving the capital</h2><p class="sub" id="capsub"></p></header>
+        <div class="tablewrap"><table class="rank" id="captable"></table></div>
+      </article>
+      <article class="card wide">
+        <header><h2>Capital and governors together</h2><p class="sub" id="jointsub"></p></header>
+        <ol class="plan" id="jointplan"></ol>
+      </article>
+    </div>
+
+    <article class="card mapcard">
+      <header class="maphead"><h2>Map</h2>
+        <div class="seg" id="mapmode" role="tablist" aria-label="Map shows">
+          <button type="button" data-mode="saved" role="tab">In your save</button>
+          <button type="button" data-mode="base" role="tab">Model now</button>
+          <button type="button" data-mode="plan" role="tab" aria-selected="true">With governors</button>
+          <button type="button" data-mode="joint" role="tab">Capital + governors</button>
+          <button type="button" data-mode="gain" role="tab">Gain</button>
+        </div></header>
+      <div class="legend" id="legend"></div>
+      <div class="mapbox" id="mapbox">
+        <canvas id="map" aria-label="Proximity map"></canvas>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <p class="mapkey"><span class="k kcap">&#9733;</span> capital <span class="k kgov">&#9679;</span> governor
+        <span class="k knew">&#9670;</span> suggested governor <span class="k kmove">&#9734;</span> suggested capital</p>
+    </article>
+  </section>
+
+  <section class="help" id="how">
+    <div class="sechead"><h2>How it works</h2><span class="rule"></span></div>
+    <p class="note">A location's <em>max control</em> comes mostly from its <em>proximity</em>: 0.75% per point.
+      Proximity starts at 100 in the capital and 80 at a local governor, and every step to a neighbouring
+      location costs some &mdash; less along roads and rivers, more through hills, forests and mountains, cheap
+      at sea where you have maritime presence. This page rebuilds that spread for your nation from the save
+      and the game's map, then tries every location as a new governor or capital.</p>
+    <div class="faq">
+      <details><summary>What does &ldquo;settled tax base&rdquo; mean?</summary>
+        <p>Each location's possible tax (its tax at full control, from the save) times the max control its
+          proximity gives. Control drifts towards that maximum over years, so gains are what you'd see once it has
+          settled. Integration, satisfaction, armies and buildings also move max control; they're left out, so
+          treat gains as a way to compare places, not a promise.</p></details>
+      <details><summary>How accurate is it?</summary>
+        <p>The model re-derives your current proximity from your capital and governors and compares it to the
+          value the save records for every location; the result shows how close it got. Your nation's own proximity
+          bonuses (advances, laws, societal values) are folded into one factor fitted to your save. Routes over
+          lagoons and short sea crossings are the least accurate part.</p></details>
+      <details><summary>Where can a local governor go?</summary>
+        <p>In a city with a road to the capital, not in the capital or a subject's land, and only as many as your
+          advances allow (one from the Age of Discovery). Untick <em>Only where one can be built now</em> to see
+          where one would pay off once you've upgraded a town or laid a road.</p></details>
+      <details><summary>Does moving the capital keep my governors?</summary>
+        <p>The capital rankings keep your existing governors where they are. A governor that loses its road to
+          the new capital is removed by the game, so check the roads before moving.</p></details>
+    </div>
+  </section>
+  <footer><span>A non-commercial fan tool, not affiliated with Paradox Interactive. Map data from Europa Universalis V
+    &copy; Paradox Interactive. Your saves stay on your computer.</span></footer>
+</div>
+<script src="js/placement.js"></script>
+</body>
+</html>
