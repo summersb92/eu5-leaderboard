@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EU5 Urban Rights Advisor</title>
+<meta name="description" content="Which urban rights to grant where in Europa Universalis V, valued from what each town and city makes in your save, entirely in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📜</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/placement.css">
+<link rel="stylesheet" href="css/rights.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <p class="eyebrow"><span>Europa Universalis V</span><span><a href="./">&larr; Leaderboard</a> · <a href="placement.html">Capital finder</a></span></p>
+    <h1>Urban rights advisor</h1>
+    <p class="lede">Drop in a save, pick a nation, and see which <strong>urban rights</strong> pay most in each town and city
+      &mdash; from what its RGO and buildings actually make, at its market's prices. Focused on the
+      <strong>Borough Privileges</strong> rights (Printing, Textile, Tooling&hellip;): +20&ndash;30% of some goods, &minus;5% production
+      efficiency for every building there. It all runs in this page; <strong>your save is never uploaded</strong>.</p>
+  </header>
+
+  <main>
+    <section class="steps" aria-label="Load a save">
+      <div class="step" id="step-save">
+        <div class="stephead"><h2>Your save</h2></div>
+        <label class="drop" id="drop" tabindex="0">
+          <input type="file" id="saveinput" accept=".eu5" hidden>
+          <span class="dropmain">Drop a <code>.eu5</code> save here, or <u>choose one</u></span>
+          <span class="dropsub">It has to be written in debug mode, the same as for the
+            <a href="./#readable">leaderboard</a>. Usually in
+            <code class="path">Documents\Paradox Interactive\Europa Universalis V\save games</code></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="status" id="status" hidden aria-live="polite">
+      <div class="statusline">
+        <span class="spinner" id="spinner" aria-hidden="true"></span>
+        <span id="stagetext">Working…</span>
+        <span class="elapsed mono" id="elapsed"></span>
+      </div>
+      <progress class="bar" id="buildbar" max="1" value="0"></progress>
+      <div class="errorbox" id="errorbox" hidden></div>
+      <details class="logbox"><summary>Details</summary><pre id="log"></pre></details>
+    </section>
+  </main>
+
+  <section class="result" id="result" hidden>
+    <div class="controls">
+      <label class="ctl ctlnation"><span>Nation</span><select id="nation"></select></label>
+      <label class="chk"><input type="checkbox" id="borough" checked> Borough Privileges rights only
+        <small>(untick for regional ones too: Tjärprivilegier, Bergslag…)</small></label>
+      <label class="chk"><input type="checkbox" id="rgopen"> &minus;5% efficiency hits the RGO too
+        <small>(pessimistic)</small></label>
+    </div>
+    <p class="savename mono" id="savename"></p>
+
+    <div class="tiles" id="tiles"></div>
+    <p class="fitnote" id="unitnote">Values are <b>gold a month of extra output</b> at the location's market prices &mdash; the change
+      in what its RGO and buildings sell. Inputs don't change, so it's all extra profit for the building owners and the
+      location's wealth; your treasury sees the part you tax.</p>
+
+    <div class="cards">
+      <article class="card wide">
+        <header><h2>Grant these</h2><p class="sub" id="recsub"></p></header>
+        <div class="tablewrap"><table class="rank" id="rectable"></table></div>
+        <details class="more"><summary>Every town and city, best right first</summary>
+          <div class="tablewrap"><table class="rank" id="alltable"></table></div></details>
+      </article>
+
+      <article class="card wide" id="detailcard">
+        <header class="dethead"><h2 id="detname">Location</h2>
+          <label class="ctl"><span>Location</span><select id="detsel"></select></label>
+          <p class="sub" id="detsub"></p></header>
+        <div class="detgrid">
+          <div>
+            <h3>Every right here</h3>
+            <div class="tablewrap"><table class="rank" id="dettable"></table></div>
+          </div>
+          <div>
+            <h3>What it makes now</h3>
+            <div class="tablewrap"><table class="rank" id="maketable"></table></div>
+            <h3 id="advhead">Grow these to get more from the best right</h3>
+            <div class="tablewrap"><table class="rank" id="advtable"></table></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card wide">
+        <header><h2>Future towns and cities</h2><p class="sub">Rural locations and towns whose <em>RGO</em> a right would boost, or
+          whose raw material feeds a guild that a right boosts &mdash; good places to urbanise, or to give a town a second right once
+          it's a city. A new town starts without buildings, so this values the RGO boost, and what the right would add to a
+          guild just big enough to use all the RGO's output, up to 10 levels, among the guilds you've unlocked that use it as their main input (its margin per level at today's prices shows whether that guild
+          pays on its own).</p></header>
+        <div class="tablewrap"><table class="rank" id="futtable"></table></div>
+      </article>
+    </div>
+
+    <article class="card mapcard">
+      <header class="maphead"><h2>Map</h2>
+        <div class="seg" id="mapmode" role="tablist" aria-label="Map shows">
+          <button type="button" data-mode="best" role="tab" aria-selected="true">Best right</button>
+          <button type="button" data-mode="rgo" role="tab">Town potential</button>
+          <button type="button" data-mode="one" role="tab">One right</button>
+        </div>
+        <label class="ctl" id="oneright" hidden><span>Right</span><select id="rightsel"></select></label>
+      </header>
+      <div class="legend" id="legend"></div>
+      <div class="mapbox" id="mapbox">
+        <canvas id="map" aria-label="Urban rights map"></canvas>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <p class="mapkey"><span class="k kcap">&#9733;</span> capital <span class="k kgov">&#9679;</span> city
+        <span class="k knew">&#9670;</span> town <span class="k">&#9633;</span> outline: has urban rights &middot; click a location for its details</p>
+    </article>
+  </section>
+
+  <section class="help" id="how">
+    <div class="sechead"><h2>How it works</h2><span class="rule"></span></div>
+    <p class="note">The <em>Borough Privileges</em> advance (Age of Discovery) unlocks nine production rights. Each adds
+      +20% (Tooling, Naval Supplies and Masonry: +25&ndash;30%) output of two or three goods in the location and costs 5%
+      production efficiency there. A town holds one urban right, a city two, a megalopolis three. This page reads what
+      each location makes from your save &mdash; its RGO workers and every building's level, staffing and production method
+      &mdash; scales it to the supply its market records, and prices it at that market's prices.</p>
+    <div class="faq">
+      <details><summary>Why does the RGO get the bonus but not the penalty?</summary>
+        <p>A right's goods bonus (e.g. <code>local_dyes_output_modifier</code>) changes all output of that good in the
+          location, RGO included &mdash; Naval Supplies Rights boosting tar, a raw material, shows it. The penalty is
+          <code>local_production_efficiency</code>, which the game applies to buildings; RGOs use a separate raw material
+          output modifier. Tick <em>&minus;5% efficiency hits the RGO too</em> for the pessimistic case.</p></details>
+      <details><summary>Danzig: Printing or Textile Rights?</summary>
+        <p>Both boost dyes, so the dyes RGO gains the same either way. The difference is the buildings: Printing boosts paper
+          and books (a scriptorium, a paper guild), Textile boosts cloth and fine cloth. Whichever set of guilds is bigger in
+          the city wins, and the penalty is the same 5% of every building's output in both cases.</p></details>
+      <details><summary>What about the rights it already has?</summary>
+        <p>Rights already granted count against the slots. When a town or city is full the table still shows what the best
+          production right would be worth, so you can weigh it against what's there (Lübeck rights' marketplace levels, a
+          staple port&hellip;) &mdash; this page doesn't value those.</p></details>
+      <details><summary>How accurate is it?</summary>
+        <p>Output follows the save: each building's output per level times its level and staffing, and the RGO's workers,
+          scaled so the location's share of its market matches the market's recorded supply. The page assumes a right's
+          bonus and penalty add up (+20% &minus; 5% = +15% for a boosted good). Prices move as supply grows, so a big boost to
+          a good your market already has plenty of will be worth a little less than shown.</p></details>
+    </div>
+  </section>
+  <footer><span>A non-commercial fan tool, not affiliated with Paradox Interactive. Game data from Europa Universalis V
+    &copy; Paradox Interactive. Your saves stay on your computer.</span></footer>
+</div>
+<script src="js/rights.js"></script>
+</body>
+</html>

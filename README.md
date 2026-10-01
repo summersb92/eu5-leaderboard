@@ -142,6 +142,52 @@ After a game patch, rebuild it next to the pack's `map.json`:
 node tools/build_proximity_graph.js "<EU5 install>/game" 1.3.11
 ```
 
+## Urban rights advisor
+
+`rights.html` values every urban right in every location of a nation, from
+what the save says each location makes. It's built around the nine
+**Borough Privileges** rights (Printing, Textile, Tooling, Weaponry,
+Artisan, Spirituous, Masonry, Jewelry, Naval Supplies): each adds 20-30%
+output of two or three goods in the location and costs 5% production
+efficiency there. Untick *Borough Privileges rights only* to include the
+regional rights with goods bonuses too (Tjärprivilegier, Bergslag...).
+
+For each location it reads the RGO's workers, and every building's level,
+staffing and production method, scales them so the location's share
+matches its market's recorded supply of each good (from raw materials and
+from buildings), and prices them at that market. A right's value is the
+change in output value: its bonus on the goods it boosts (RGO and
+buildings alike) less 5% of every building's output. Production efficiency
+is a building modifier, so the RGO doesn't pay the penalty unless you tick
+the pessimistic option. Building inputs don't change, so the gain is all
+profit.
+
+It lists the best grant for each town and city with a free slot (a town
+holds one right, a city two, a megalopolis three), the full breakdown for
+any location, the guilds worth growing for its best right, and **future
+towns**: rural locations and towns whose RGO a right boosts, or whose raw
+material is the main input of a guild a right boosts. For those it sizes
+a guild to use all the RGO's output (up to 10 levels, among the buildings
+the nation has unlocked) and shows its margin per level and what the
+right would add. The map shows the best right, that town potential, or
+one right's value everywhere.
+
+| File | Role |
+| --- | --- |
+| `rights.html`, `css/rights.css`, `js/rights.js` | Page, tables, map |
+| `js/rights-worker.js` | Reads the save (via `worker.js`) |
+| `js/rights-model.js` | Save readers and the valuation; also loads in Node |
+| `tools/build_rights_data.js` | Builds `gamedata/<version>/rights.json` |
+
+`rights.json` holds every urban right (modifiers, unlocking advance,
+port/raw-material/rank conditions, exclusions), every building that makes
+goods (employment per level, ranks, unlocking advances, production
+methods) and every good's default price. After a game patch:
+
+```
+node tools/build_rights_data.js "<EU5 install>/game" 1.3.11
+```
+
 ## Institutions
 
 The report shows which institutions each nation has embraced and, for each
