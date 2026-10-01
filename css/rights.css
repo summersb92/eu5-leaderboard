@@ -1,0 +1,25 @@
+/* Urban rights advisor - on top of app.css and placement.css */
+.card h3{font:600 11px/1.4 Archivo,sans-serif; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3); margin:14px 0 4px}
+.card h3:first-child{margin-top:0}
+.dethead{display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px 18px}
+.dethead .sub{flex-basis:100%}
+.dethead select{min-width:min(260px,70vw)}
+.detgrid{display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:10px 26px}
+@media (max-width:860px){.detgrid{grid-template-columns:minmax(0,1fr)}}
+.rank td.wrap{white-space:normal; min-width:220px}
+.rank td .dim,.dim{color:var(--ink-3)}
+.rank tr.pick td{background:var(--accent-wash)}
+.rank tr.click{cursor:pointer}
+.rank tr.blocked td{color:var(--ink-3)}
+.rank td small{color:var(--ink-3)}
+.rights-chip{display:inline-block; font:600 11px/1.6 Archivo,sans-serif; border-radius:3px; padding:0 6px; margin:1px 4px 1px 0;
+  background:var(--surface-2); color:var(--ink-2); white-space:nowrap}
+.rights-chip.new{background:var(--accent-wash); color:var(--accent)}
+.status-chip{display:inline-block; font:600 10.5px/1.6 Archivo,sans-serif; letter-spacing:.06em; text-transform:uppercase;
+  border-radius:3px; padding:0 6px; border:1px solid currentColor; margin-left:6px}
+.status-chip.free{color:var(--verd)} .status-chip.full{color:var(--alarm)} .status-chip.rural{color:var(--ink-3)}
+#oneright{margin-left:auto}
+#oneright[hidden]{display:none}
+#oneright select{min-width:180px}
+.legend .cats{display:flex; flex-wrap:wrap; gap:4px 12px}
+.legend .cats i{display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:5px; vertical-align:-1px}
