@@ -97,14 +97,53 @@ Interactive, included for non-commercial fan use.
 
 ## Military estimates
 
-Saves don't record discipline, levy combat ability or potential levies, so
-the page estimates them. Discipline and levy combat add up the bonuses from
+Saves don't record discipline, levy combat ability, military tactics or
+potential levies, so the page estimates them. Discipline, levy combat and
+tactics add up the bonuses from
 what the save does record (advances, laws, privileges, reforms, societal
 values, event modifiers, ruler traits), using a table built from the game
 files; potential levies sum the levy figures the save keeps for each
 location's pops. After a game patch, regenerate the table with
 `py tools/extract_military_modifiers.py` and paste it over `MIL_SOURCES` in
 `js/worker.js`.
+
+## Military strength
+
+The **Military strength** section ranks the nations by one number, their
+military power, in thousands of plain regular infantry (combat power 1, no
+discipline, military tactics 1): 10,000 such men score 10. It's built from
+the game's own combat rules:
+
+- **Damage dealt** by each regiment: its unit type's combat power (from
+  `unit_types`, after `copy_from`: infantry 1, cavalry 4, artillery 2-7.5,
+  support 0.25) x (1 + the nation's bonus for that unit category, e.g.
+  `army_heavy_infantry_power` +10% from an advance) x men x (1 +
+  discipline) x the type's damage-done modifiers. Levies deal 75% of that (`LAND_LEVY_COMBAT_IMPACT`) x (1 +
+  levy combat ability), with 10% less discipline (`is_army_levy`).
+- **Damage it can take**: men x military tactics x (1 + discipline) over
+  its category's and type's damage-taken modifiers, raised by experience
+  (up to half less damage, `LAND_EXPERIENCE_DAMAGE_REDUCTION`).
+- **Power** = sqrt(dealt x taken) summed over the army - Lanchester's
+  square law, so it grows in step with army size.
+
+The table shows the modifiers behind each score: discipline (and what
+levies get after their -10%), military tactics, levy combat (and the
+damage multiplier levies end up with), and the combat power bonus for each
+unit category with the men of that category beneath it. Hover any of them
+for the advances, laws, privileges and so on that make it up.
+
+*Power* counts every regiment plus the levies that haven't been raised yet
+(nobles' levies as the current age's heavy cavalry, everyone else's as its
+light infantry); *in field* counts only what is under arms now; *per 1k
+men* shows quality. Military tactics is estimated like discipline (base 1
+plus advances, laws, societal values...). Potential levies are what the
+save says each location can supply now: levies take 20 years to recover
+after being called up, so a nation that has just fought a war can show very
+few. Generals, morale, terrain, supply, combined arms, forts and navies are
+left out.
+
+The unit table (`UNIT_STATS` in `js/worker.js`) comes from
+`py tools/extract_military_modifiers.py --units`; rerun it after a patch.
 
 ## Capital & governor finder
 

@@ -170,22 +170,53 @@ async function loadStartingAdvances(fs) {
   return Object.keys(out).length ? out : null;
 }
 
-// Discipline and levy combat ability aren't in the save - the game derives
-// them from modifiers at run time. The estimate adds up the bonuses from
-// sources the save does record, using this table of what each source gives
-// (d = discipline, l = levy combat ability, as fractions). Built from the
-// 1.3.11 game files by tools/extract_military_modifiers.py.
-const MIL_SOURCES = {"advance":{"appointed_chain_of_command":{"l":0.1},"regular_levy_training":{"l":0.1},"discipline_drills":{"d":0.05},"seljuk_roots":{"d":0.05},"bul_the_standing_drilled_infantry":{"d":0.05},"reform_the_feudal_army":{"d":0.05},"french_ambition":{"d":0.05},"military_border":{"d":0.03},"drafted_hatun_runas":{"l":0.1},"ira_the_qurchi":{"d":0.05},"a_neverending_crusade":{"d":0.05},"mandinka_warrior_spirit":{"d":0.05},"nav_basque_ferocity":{"d":0.025},"rom_restore_the_legions":{"d":0.025},"hum_the_kosaca_iron_fist":{"d":0.05},"modernization_of_the_military":{"d":0.05},"swedish_steel":{"d":0.05},"teu_crusader_discipline":{"d":0.05},"conquerors_legacy":{"d":0.05},"turkic_traditions":{"d":0.05},"svn_the_slavonian_grenadier_regiments":{"d":0.05},"royal_mamluks":{"d":0.05},"ori_odia_militarization":{"d":0.05},"auftragstaktik":{"d":0.05},"sia_thai_unity":{"d":0.05},"zmw_discipline_and_traning":{"d":0.05},"thp_a_centralized_levy_system":{"l":0.1},"ant_the_eternal_resistance":{"d":0.05},"dal_the_soldato_dalmantine":{"d":0.05},"pcz_piacentine_soldiery":{"d":0.05},"mod_accademia_militare":{"d":0.05},"feo_the_gothic_red_guard_advance":{"d":0.05},"aqu_friulian_soldiery":{"d":0.05},"wallachian_heritage":{"d":0.05},"warriors_unity":{"d":0.05},"jap_bushido":{"d":0.05},"pea_the_griffin_companies":{"d":0.05},"pie_ordinanza_piedmontese":{"d":0.05},"pun_reforming_the_punjabi_army":{"d":0.05},"raj_mandatory_firearm_drilling":{"d":0.05},"rav_battle_of_ravenna":{"d":0.05},"cli_the_windic_march_arsenal":{"d":0.05},"pis_natural_philosophy":{"d":0.05},"cossack_administration":{"d":0.05},"lat_the_new_praetorian_guard_advance":{"d":0.05},"smz_tsurinobuse":{"d":0.05}},"policy":{"peasant_levies":[{"l":-0.1}],"longbow_competitions":[{"l":0.1}],"landholders":[{"l":0.05}],"citizenry":[{"l":0.05}],"military_rulership_policy":[{"l":0.2}],"black_army_policy":[{"d":0.025}],"elite_training_policy":[{"d":0.05}],"byz_tagmata_policy_upgraded":[{"d":0.025}],"al_mamalik_al_sultaniyya":[{"d":0.025}],"sump_law_warrior_culture":[{"d":0.05}],"apc_senapati_focus_policy":[{"d":0.05}],"miri_piri":[{"d":0.025}]},"privilege":{"clergy_military_orders":[{"d":0.025,"not_reform":"military_order_reform"},{"d":0.05,"reform":"military_order_reform"}],"auxilium_et_consilium":[{"l":0.1}],"primacy_of_nobility":[{"d":0.05}],"rajput_society":[{"d":0.05}],"peasants_allowed_weapons_privilege":[{"l":0.1}],"land_owning_farmers":[{"l":0.05}]},"reform":{"weapons_quality_standards":[{"d":0.05}],"magna_carta_reform":[{"l":0.1}],"modern_imperial_army":[{"d":0.05}],"diwan_i_bandagan":[{"d":0.025}],"noble_elite":[{"l":0.05}],"military_order_reform":[{"l":0.1}]},"societal":{"aristocracy_vs_plutocracy":{"left":{"d":0.1}},"serfdom_vs_free_subjects":{"right":{"l":0.1}}},"modifier":{"bad_discipline":{"d":-0.05},"nap_struggle_for_independence":{"d":0.1},"the_rule_of_god":{"d":0.05},"the_dying_of_the_light":{"d":-0.05},"good_discipline":{"d":0.025},"foreign_veterans":{"d":-0.015},"fra_compagnie_d_ordonnance":{"d":0.05},"fra_belligerent_policy":{"d":0.005},"indochina_french_advisors":{"d":0.05},"sbl_english_backing":{"l":0.1},"sco_desertion_among_balliol":{"d":-0.1},"sco_advance_into_england":{"d":0.05},"sco_army_focus":{"d":0.05},"plc_school_of_chivalry_burghers_modifier":{"d":0.05},"plc_school_of_chivalry_modifier":{"d":0.05},"aristocracy_united":{"d":0.05},"maj_sumpah_palapa_modifier":{"d":0.05},"quality_arms_modifier":{"d":0.03},"parl_cavalry_reserve_mod":{"l":0.1},"gymnopaedia_modifier":{"d":0.05},"disciplined_service_modifier":{"d":0.1},"byz_renewed_military_modifier":{"d":0.01},"legendary_generals_modifier":{"d":0.05}},"trait":{"strict":{"d":0.05}}};
+// Discipline, levy combat ability and military tactics aren't in the save -
+// the game derives them from modifiers at run time. The estimate adds up the
+// bonuses from sources the save does record, using this table of what each
+// source gives (d = discipline, l = levy combat ability, as fractions;
+// t = military tactics, on top of the base 1; li, hi, lc, hc, art, aux =
+// combat power of light/heavy infantry, light/heavy cavalry, artillery and
+// support units, as fractions). Built from the 1.3.11 game
+// files by tools/extract_military_modifiers.py.
+const MIL_SOURCES = {"advance":{"line_infantry":{"t":0.25},"pike_square":{"t":0.25},"spanish_square":{"t":0.25},"gunpowder_advance":{"t":0.25},"military_tactics_advance_6":{"t":0.25},"feudalism_advance":{"t":1.0},"appointed_chain_of_command":{"l":0.1},"finest_of_horses":{"lc":0.1,"hc":0.1},"regular_levy_training":{"l":0.1},"discipline_drills":{"d":0.05},"superior_firepower":{"art":0.1},"private_to_marshal":{"hi":0.1},"massed_battery":{"art":0.1},"seljuk_roots":{"d":0.05},"ara_gunpowder_souls":{"art":0.1},"bul_the_bulgarian_gunpowder_foundries":{"art":0.1},"bul_the_standing_drilled_infantry":{"d":0.05},"reform_the_feudal_army":{"d":0.05},"compagnie_d_ordonnance":{"hc":0.05},"chg_chagatai_riders":{"lc":0.2},"cri_genghisid_legacy":{"lc":0.2},"dan_royal_life_guards":{"hi":0.1},"english_tradition":{"hi":0.1},"a_modern_nation":{"hi":0.1},"fra_gendarmes":{"hc":0.1},"french_ambition":{"d":0.05},"glh_tatar_traditions":{"lc":0.2},"austrian_military_flexibility":{"t":0.1},"military_border":{"d":0.03},"imperial_artillery":{"art":0.1},"hin_sepahi":{"hi":0.15},"hin_rocketry":{"art":0.1},"hun_composite_light_cavalry":{"lc":0.2},"ilk_descendants_of_genghis_khan":{"lc":0.2},"drafted_hatun_runas":{"l":0.1},"adapted_incan_army":{"t":0.1},"ira_persian_horses":{"lc":0.1},"ira_the_qurchi":{"d":0.05},"karamanid_cavalry":{"lc":0.1},"a_neverending_crusade":{"d":0.05},"kon_study_european_firearms":{"hi":0.05},"kor_border_defense_council":{"hi":0.1},"kor_korean_cannon":{"art":0.1},"krs_kurdish_horses":{"lc":0.15},"mandinka_warrior_spirit":{"d":0.05},"kele_koun_advance":{"li":0.1},"farari_corps_advance":{"lc":0.05},"mge_ghostly_horses_of_the_plain":{"lc":0.2},"preobrazhensky_semyonovsky_imperial_guard":{"t":0.1},"nav_basque_ferocity":{"d":0.025},"nav_riflemen_march":{"hi":0.1},"gel_warring_spirit":{"hi":0.1},"por_battle_ourique":{"li":0.1,"hi":0.1},"por_royal_military_academy":{"art":0.1},"rom_restore_the_legions":{"d":0.025,"hi":0.1},"home_of_hussars":{"lc":0.1},"hum_the_kosaca_iron_fist":{"d":0.05},"military_modernization":{"li":0.1,"hi":0.1},"armories_of_smolensk":{"art":0.1},"malian_military_tactics":{"hi":0.1},"modernization_of_the_military":{"d":0.05},"swedish_tradition":{"hi":0.2},"swedish_steel":{"d":0.05},"teu_crusader_discipline":{"d":0.05},"teu_teutonic_heavy_cavalry":{"hc":0.1},"teu_infantry_tactics":{"hi":0.1},"tamerlane_chess":{"t":0.1},"conquerors_legacy":{"d":0.05},"aztec_chargers":{"hi":0.2},"turkic_traditions":{"d":0.05},"vij_arab_horses":{"lc":0.1},"vij_first_indian_artillery":{"art":0.1},"ayu_prestigious_cavalry":{"hc":0.15},"bos_kingly_ambitions":{"hi":0.05},"cir_horsemen_of_the_steppe":{"lc":0.05},"cro_reliance_on_adriatic":{"li":0.1},"croatian_the_cravats":{"lc":0.15},"svn_the_slavonian_grenadier_regiments":{"d":0.05},"geo_legacy_of_saint_george":{"hi":0.1},"royal_mamluks":{"d":0.05},"study_foreign_gunpowder_techniques":{"art":0.05},"ori_odia_militarization":{"d":0.05},"goose_step":{"li":0.1,"hi":0.2},"auftragstaktik":{"d":0.05},"sia_thai_unity":{"d":0.05},"bavarian_imperial_knights":{"hc":0.1},"bavarian_hofkriegsrat":{"t":0.1},"zmw_discipline_and_traning":{"d":0.05},"zmw_empowering_the_rozwi":{"hi":0.1},"zmw_cow_horn_tactics":{"t":0.1},"albanian_the_stradioti_tradition":{"lc":0.15},"thp_a_centralized_levy_system":{"l":0.1},"ant_the_eternal_resistance":{"d":0.05},"bng_bengali_paik":{"li":0.1},"bng_artillery_corps":{"art":0.1},"cor_guardia_corsa":{"li":0.1},"dal_the_soldato_dalmantine":{"d":0.05},"pcz_piacentine_soldiery":{"d":0.05},"mod_accademia_militare":{"d":0.05},"arabian_horsemanship":{"lc":0.1},"greek_group_stratioti_levies_advance":{"lc":0.1},"ths_thessalian_horse_breeding_advance":{"hc":0.1},"gre_the_new_stratikon_advance":{"li":0.1,"hi":0.1},"feo_the_gothic_red_guard_advance":{"d":0.05},"rhaetian_the_mountain_warriors":{"hi":0.1},"aqu_friulian_soldiery":{"d":0.05},"wallachian_heritage":{"d":0.05},"rmn_the_pandur_militias":{"li":0.1},"haudenosaunee_heritage":{"li":0.1},"warriors_unity":{"d":0.05},"swiss_halberd_infantry":{"hi":0.1},"alpine_defensiveness":{"t":0.1},"advanced_paik_system_advance":{"li":0.05},"jap_bushido":{"d":0.05},"mounted_people":{"lc":0.2,"hc":0.1},"bah_arabian_horses":{"lc":0.1},"lowered_power_of_barons":{"hi":0.1},"mhr_tradition_of_military_service":{"lc":0.15},"pea_the_griffin_companies":{"d":0.05},"neapolitan_army_reforms":{"li":0.1,"hi":0.1},"pie_ordinanza_piedmontese":{"d":0.05},"pie_cavalleria_piemontese":{"t":0.1},"pun_reforming_the_punjabi_army":{"d":0.05},"raj_combat_training":{"hi":0.1},"raj_marwari_horses":{"lc":0.15},"raj_mandatory_firearm_drilling":{"d":0.05},"urb_the_hill_fortresses":{"t":0.1},"rav_battle_of_ravenna":{"d":0.05},"russian_artillery_yard":{"art":0.1},"sar_the_cavalcadores":{"lc":0.15},"cli_the_windic_march_arsenal":{"d":0.05},"toi_muay":{"li":0.1},"pis_natural_philosophy":{"d":0.05,"t":0.1},"perpetual_general_captain_of_the_people":{"t":0.1},"dai_giao_chi_arquebus":{"hi":0.1},"vivaro_alpine_infantry":{"t":0.1,"li":0.1},"cossacks_recruitment":{"lc":0.15},"cossack_administration":{"d":0.05},"cossack_reputation":{"lc":0.1},"ath_the_catalan_company_advance":{"li":0.1,"hi":0.1},"ach_knights_of_the_peloponnese_advance":{"hc":0.1},"lat_the_new_praetorian_guard_advance":{"d":0.05},"the_the_lombard_guard_advance":{"hi":0.1},"neo_the_neopatras_horse_breeding_program_advance":{"hc":0.1},"ath_the_attican_gunpowder_mills_advance":{"art":0.1},"bod_the_oeta_riflemen_advance":{"li":0.05},"trampling_horde":{"lc":0.1},"horde_ardor":{"hc":0.2},"by_the_grace_of_god":{"t":0.025},"cba_katori_jingu":{"hi":0.05},"smz_satsuma_shugo":{"hi":0.1},"stk_kashima_jingu":{"hi":0.1},"tkd_takeda_ryu":{"hc":0.1},"utn_legacy_of_nasu_no_yoichi":{"hi":0.1},"ogs_kiso_uma":{"hc":0.05},"smz_tsurinobuse":{"d":0.05},"dte_dragon_of_oshu":{"hi":0.1},"oda_triple_firing":{"hi":0.1},"smz_tanegashima":{"hi":0.1},"stickball_game":{"li":0.1},"head_hunters":{"li":0.1},"skilled_cavalry_raids":{"lc":0.1}},"policy":{"peasant_levies":[{"l":-0.1}],"longbow_competitions":[{"l":0.1}],"landholders":[{"l":0.05}],"citizenry":[{"l":0.05}],"military_rulership_policy":[{"l":0.2}],"komnenian_formalization":[{"hc":0.1}],"plc_sarmatism":[{"lc":0.1}],"mongol_law_policy":[{"lc":0.1}],"black_army_policy":[{"d":0.025}],"mansabdar_system":[{"hc":0.1}],"elite_training_policy":[{"d":0.05}],"byz_tagmata_policy_upgraded":[{"d":0.025}],"meritocratic_leadership_policy":[{"t":0.1}],"noble_cadets_policy":[{"t":0.1}],"superior_firepower_policy":[{"art":0.1}],"sustained_discipline_policy":[{"li":0.1,"hi":0.1}],"cavalry_warfare_policy":[{"lc":0.1,"hc":0.1}],"al_mamalik_al_sultaniyya":[{"d":0.025}],"sump_law_warrior_culture":[{"d":0.05}],"apc_senapati_focus_policy":[{"d":0.05}],"mall_akhara":[{"hi":0.05}],"miri_piri":[{"d":0.025}]},"privilege":{"clergy_military_orders":[{"d":0.025,"not_reform":"military_order_reform"},{"d":0.05,"reform":"military_order_reform"}],"cossacks_register":[{"t":0.1}],"plc_cossack_treaty_of_hadiach":[{"lc":0.1}],"auxilium_et_consilium":[{"l":0.1}],"primacy_of_nobility":[{"d":0.05}],"rajput_society":[{"d":0.05}],"peasants_allowed_weapons_privilege":[{"l":0.1}],"land_owning_farmers":[{"l":0.05}]},"reform":{"weapons_quality_standards":[{"d":0.05}],"magna_carta_reform":[{"l":0.1}],"basic_timariot_system":[{"lc":0.1}],"expanded_timariot_system":[{"lc":0.2}],"sekban_system":[{"li":0.1}],"ottoman_new_order_army":[{"t":0.1,"art":0.15}],"european_militia_reform":[{"t":0.1,"hc":0.1,"art":0.1}],"modern_imperial_army":[{"d":0.05}],"diwan_i_bandagan":[{"d":0.025}],"cossacks_reform":[{"lc":0.1}],"noble_elite":[{"l":0.05}],"military_order_reform":[{"l":0.1}]},"societal":{"aristocracy_vs_plutocracy":{"left":{"d":0.1}},"serfdom_vs_free_subjects":{"right":{"l":0.1}},"quality_vs_quantity":{"left":{"t":0.1}}},"modifier":{"yua_troop_rotation":{"li":-0.1},"chi_huolongjing":{"art":0.1},"bad_discipline":{"d":-0.05},"nap_struggle_for_independence":{"d":0.1},"blue_dragon":{"lc":0.1},"the_rule_of_god":{"d":0.05},"the_dying_of_the_light":{"d":-0.05},"finest_infantry":{"li":0.05,"hi":0.05},"cavalry_companions":{"lc":0.05,"hc":0.05},"to_the_last_man":{"t":0.1},"good_discipline":{"d":0.025},"overconfidence":{"t":-0.2},"foreign_veterans":{"d":-0.015,"t":0.2},"fra_traditional_warfare":{"hi":0.1},"fra_compagnie_d_ordonnance":{"d":0.05},"fra_belligerent_policy":{"d":0.005},"indochina_french_advisors":{"d":0.05},"fra_favoring_offense_over_vauban_defense":{"t":0.1},"sbl_english_backing":{"l":0.1},"sco_desertion_among_balliol":{"d":-0.1},"sco_advance_into_england":{"d":0.05},"sco_purging_enclaves":{"hi":0.1},"sco_traditional_warfare_preferred":{"hi":0.15},"sco_army_focus":{"d":0.05},"sco_focus_on_exterior_enemies":{"hi":0.1},"battle_artillery_model":{"art":0.15},"artillery_advantage":{"art":0.1},"jap_tadayoshi_arrival_to_stc":{"hi":0.15},"jap_shogunal_army":{"hi":0.1},"jap_shogunal_army_levy_focus":{"li":0.05},"plc_school_of_chivalry_burghers_modifier":{"d":0.05},"plc_school_of_chivalry_modifier":{"d":0.05},"ira_selective_horse_breeding":{"lc":0.2},"ottoman_artillery_reform":{"art":0.1},"aristocracy_united":{"d":0.05},"iro_strong_tribal_unity":{"li":0.2},"iro_champlain_aided_the_hurons":{"li":0.1},"trading_in_firearms_iro":{"hi":0.15},"nov_study_of_gunpowder":{"hi":0.05},"maj_sumpah_palapa_modifier":{"d":0.05},"quality_arms_modifier":{"d":0.03},"parl_feudal_levies_mod":{"hc":0.05},"parl_cavalry_reserve_mod":{"l":0.1},"equus_october_modifier":{"hc":0.2},"gymnopaedia_modifier":{"d":0.05},"disciplined_service_modifier":{"d":0.1},"reformation_of_the_infantry_modifier":{"li":0.05,"hi":0.05},"reformation_of_the_cavalry_modifier":{"lc":0.05,"hc":0.05},"byz_renewed_military_modifier":{"d":0.01},"legendary_generals_modifier":{"d":0.05},"strategikon_pezikou_modifier":{"hi":0.05},"strategikon_ippikou_modifier":{"hc":0.05}},"trait":{"tactical_genius":{"t":0.05},"strict":{"d":0.05}}};
+
+// Each army unit type's [combat power, damage done x, damage taken x, category],
+// after copy_from; damage done/taken average the strength and morale
+// modifiers of the unit and its category. From the 1.3.11 game files by
+// `tools/extract_military_modifiers.py --units`.
+const UNIT_STATS = {"a_age_1_traditions_light_infantry":[1.0,0.95,1.05,"li"],"a_age_1_traditions_heavy_infantry":[1.0,1.0,1.0,"hi"],"a_age_1_traditions_light_cavalry":[4.0,0.95,0.788,"lc"],"a_age_1_traditions_heavy_cavalry":[4.0,1.0,0.75,"hc"],"a_age_1_traditions_auxiliary":[0.25,1.0,1.25,"aux"],"a_age_1_traditions_artillery":[2.0,1.0,1.25,"art"],"a_age_2_renaissance_light_infantry":[1.0,0.95,1.05,"li"],"a_age_2_renaissance_heavy_infantry":[1.0,1.0,1.0,"hi"],"a_age_2_renaissance_light_cavalry":[4.0,0.95,0.788,"lc"],"a_age_2_renaissance_heavy_cavalry":[4.0,1.0,0.75,"hc"],"a_age_2_renaissance_auxiliary":[0.25,1.0,1.25,"aux"],"a_age_2_renaissance_artillery":[3.0,1.0,1.25,"art"],"a_age_3_discovery_light_infantry":[1.0,0.95,1.05,"li"],"a_age_3_discovery_heavy_infantry":[1.0,1.0,1.0,"hi"],"a_age_3_discovery_light_cavalry":[4.0,0.95,0.788,"lc"],"a_age_3_discovery_heavy_cavalry":[4.0,1.0,0.75,"hc"],"a_age_3_discovery_auxiliary":[0.25,1.0,1.25,"aux"],"a_age_3_discovery_artillery":[4.0,1.0,1.25,"art"],"a_age_4_reformation_light_infantry":[1.5,0.95,1.05,"li"],"a_age_4_reformation_heavy_infantry":[1.5,1.0,1.0,"hi"],"a_age_4_reformation_light_cavalry":[4.0,0.95,0.788,"lc"],"a_age_4_reformation_heavy_cavalry":[4.0,1.0,0.75,"hc"],"a_age_4_reformation_auxiliary":[0.25,1.0,1.25,"aux"],"a_age_4_reformation_artillery":[5.0,1.0,1.25,"art"],"a_age_5_absolutism_light_infantry":[2.25,0.95,1.05,"li"],"a_age_5_absolutism_heavy_infantry":[2.25,1.0,1.0,"hi"],"a_age_5_absolutism_light_cavalry":[4.0,0.95,0.788,"lc"],"a_age_5_absolutism_heavy_cavalry":[4.0,1.0,0.75,"hc"],"a_age_5_absolutism_auxiliary":[0.25,1.0,1.25,"aux"],"a_age_5_absolutism_artillery":[5.5,1.0,1.25,"art"],"a_age_6_revolutions_light_infantry":[3.0,0.95,1.05,"li"],"a_age_6_revolutions_heavy_infantry":[3.0,1.0,1.0,"hi"],"a_age_6_revolutions_light_cavalry":[4.0,0.95,0.788,"lc"],"a_age_6_revolutions_heavy_cavalry":[4.0,1.0,0.75,"hc"],"a_age_6_revolutions_auxiliary":[0.25,1.0,1.25,"aux"],"a_age_6_revolutions_artillery":[7.5,1.0,1.25,"art"],"a_gendarmerie":[4.0,1.0,0.562,"hc"],"a_provincial_cavalry":[4.0,1.0,0.562,"hc"],"a_late_cavaliers":[4.0,1.0,0.562,"hc"],"a_cavaliers":[4.0,1.0,0.562,"hc"],"a_plated_knights":[4.0,1.0,0.469,"hc"],"a_teulu":[4.0,1.0,0.656,"hc"],"a_mailed_knights":[4.0,1.0,0.562,"hc"],"a_noble_cavalry":[4.0,1.0,0.619,"hc"],"a_order_knights":[4.0,1.0,0.562,"hc"],"a_order_knights_2":[4.0,1.0,0.562,"hc"],"a_moa_hunters":[1.0,0.95,1.05,"li"],"a_tribesmen":[1.0,0.95,1.05,"li"],"a_warriors":[1.0,1.0,1.0,"hi"],"a_champions":[1.0,1.0,1.0,"hi"],"a_chieftains":[1.0,1.0,1.0,"hi"],"a_villagers":[1.0,0.95,1.25,"li"],"a_feudal_levy":[1.0,0.9,1.05,"li"],"a_crusader_knights_base":[1.0,1.0,0.95,"hi"],"a_crusader_knights_levy":[1.0,1.0,0.95,"hi"],"a_crusader_knights":[1.0,1.0,0.95,"hi"],"a_caterans":[1.0,0.95,1.05,"li"],"a_kerns":[1.0,0.95,1.05,"li"],"a_lour_lances":[1.0,0.95,1.05,"li"],"a_schiltron":[1.0,0.95,1.05,"li"],"a_steppe_horse_archers":[4.0,1.05,0.788,"lc"],"a_steppe_horde":[4.0,0.95,0.788,"lc"],"a_tribal_cavalry":[4.0,0.95,0.788,"lc"],"a_a_urughs":[0.25,1.0,1.25,"aux"],"a_almogavars":[1.0,1.0,1.05,"li"],"a_catalan_crossbowmen":[1.0,0.95,1.05,"li"],"a_early_longbowmen":[1.0,0.95,1.05,"li"],"a_hobelars":[4.0,0.95,0.788,"lc"],"a_gallowglass":[1.0,1.0,0.925,"hi"],"a_light_jurchen_cavalry":[4.0,0.95,0.788,"lc"],"a_iron_pagoda_cavalry":[4.0,1.1,0.75,"hc"],"a_early_paik":[1.0,0.9,1.05,"li"],"a_early_paik_infantry":[1.0,0.95,1.0,"li"],"a_byzantine_cataphracts":[4.0,1.165,0.656,"hc"],"a_akritai":[1.0,1.0,0.95,"hi"],"a_varangians":[1.0,1.2,1.0,"hi"],"a_mamluk_unit_traditions":[1.0,1.05,1.0,"hi"],"a_mamluk_horsemen_traditions":[4.0,1.05,0.75,"hc"],"a_halqah_unit":[0.25,1.0,1.25,"aux"],"a_jonow_auxiliary":[0.25,1.0,1.125,"aux"],"a_sofa_infantry":[1.0,0.95,1.05,"li"],"a_mandekalu_infantry":[1.0,0.95,1.05,"li"],"a_mandekalu_cavalry":[4.0,1.0,0.694,"hc"],"a_farari_infantry":[1.0,0.95,1.025,"li"],"a_farari_cavalry":[4.0,1.0,0.619,"hc"],"a_clan_retainers":[1.0,1.0,1.0,"hi"],"a_clan_retainer_cavalry":[4.0,1.0,0.75,"hc"],"a_longbowmen":[1.0,1.0,1.05,"li"],"a_reformed_gallowglass":[1.0,1.0,0.925,"hi"],"a_wagenburg":[1.0,1.0,0.9,"hi"],"a_genoese_crossbowmen":[1.0,0.95,1.05,"li"],"a_late_almogavars":[1.0,1.05,1.05,"li"],"a_late_crusader_knights_base":[1.0,1.0,0.95,"hi"],"a_late_crusader_knights":[1.0,1.0,0.95,"hi"],"a_late_crusader_knights_levy":[1.0,1.0,0.95,"hi"],"a_hwacha":[3.0,1.1,1.25,"art"],"a_mamluk_unit_renaissance":[1.0,1.05,1.0,"hi"],"a_mamluk_horsemen_renaissance":[4.0,1.05,0.75,"hc"],"a_serbian_hussars":[4.0,0.975,0.788,"lc"],"a_muslim_riders_vijay":[4.0,1.05,0.675,"hc"],"a_late_karambit_warrior":[1.0,0.95,1.05,"li"],"a_the_black_army":[1.0,1.0,0.95,"hi"],"a_landsknechte":[1.0,1.05,0.95,"hi"],"a_late_gallowglass":[1.0,1.0,0.925,"hi"],"a_late_longbowmen":[1.0,0.95,0.95,"li"],"a_paik":[1.0,0.9,1.05,"li"],"a_paik_infantry":[1.0,0.95,1.0,"li"],"a_lanzas_de_castilla":[4.0,1.0,0.647,"hc"],"a_akinji":[4.0,0.95,0.788,"lc"],"a_reislaufer":[1.0,1.0,0.825,"hi"],"a_cetbang_cannon":[4.0,1.0,1.25,"art"],"a_dahomey_amazons":[1.0,1.05,0.95,"hi"],"a_esho_cavalry_oyo":[4.0,0.95,0.788,"lc"],"a_florentine_citizen_militia":[1.0,0.95,1.025,"li"],"a_naft_throwers":[1.0,0.975,1.1,"li"],"a_iron_helmet_musketeers":[1.5,1.1,1.0,"hi"],"a_hungarian_hussars":[4.0,0.95,0.788,"lc"],"a_pontifical_swiss_guard":[1.5,1.15,0.925,"hi"],"a_mauricians":[1.5,1.0,1.0,"hi"],"a_tercio":[1.5,1.05,0.9,"hi"],"a_sowar_cavalry":[4.0,1.075,0.75,"hc"],"a_winged_hussars":[4.0,1.125,0.75,"hc"],"a_red_cannon":[5.0,1.025,1.25,"art"],"a_banner_cavalry":[4.0,1.05,0.75,"hc"],"a_ghilman":[1.5,1.0,1.0,"hi"],"a_saxon_defensioner":[1.5,1.0,0.95,"hi"],"a_hesse_jager":[1.5,0.95,1.1,"li"],"a_gebirgsschutzen_infantry":[1.5,0.95,1.1,"li"],"a_byz_helepolis_cannon_unit":[0.25,1.0,1.25,"art"],"a_hakkapelitta":[4.0,1.0,0.75,"lc"],"a_caroleans":[2.25,1.125,0.9,"hi"],"a_scottish_highlander":[2.25,1.1,1.05,"hi"],"a_late_paik":[2.25,0.9,1.05,"li"],"a_late_paik_infantry":[2.25,0.95,1.0,"li"],"a_late_winged_hussars":[4.0,1.175,0.75,"hc"],"a_tofangchi":[2.25,1.0,1.0,"hi"],"a_tupchi":[5.5,1.1,1.25,"art"],"a_black_guard":[2.25,1.05,1.0,"hi"],"a_prussian_grenadiers":[2.25,1.15,1.0,"hi"],"a_bavarian_jager":[2.25,0.95,1.05,"li"],"a_hajduk":[2.25,0.95,1.1,"li"],"a_redcoats":[3.0,1.0,0.95,"hi"],"a_experimental_riflemen":[3.0,0.95,1.05,"li"],"a_cacadores":[3.0,1.0,0.925,"hi"],"a_gurkha":[3.0,1.0,0.925,"hi"],"a_jazayerchi":[3.0,1.1,1.0,"hi"],"a_austrian_grenzhussar":[4.0,0.95,0.788,"lc"],"a_pandur":[3.0,0.95,1.05,"li"],"a_austrian_grenzer":[3.0,0.95,1.05,"li"],"a_grenadiers":[3.0,1.1,1.05,"hi"],"a_renaissance_conquistadors":[1.0,1.1,0.95,"hi"],"a_discovery_conquistadors":[1.0,1.1,0.95,"hi"],"a_footmen":[1.0,1.0,0.975,"hi"],"a_archers":[1.0,0.95,1.05,"li"],"a_footmen_levy":[1.0,1.0,0.975,"hi"],"a_horsemen":[4.0,0.95,0.788,"lc"],"a_armored_horsemen":[4.0,1.0,0.75,"hc"],"a_camp_followers":[0.25,1.0,1.25,"aux"],"a_men_at_arms":[1.0,1.0,0.95,"hi"],"a_crossbowmen":[1.0,0.95,1.05,"li"],"a_handgonners":[1.0,1.05,1.0,"li"],"a_men_at_arms_levy":[1.0,1.0,0.95,"hi"],"a_cavalrymen":[4.0,0.95,0.788,"lc"],"a_heavy_cavalrymen":[4.0,1.0,0.75,"hc"],"a_houfnice":[3.0,1.0,1.25,"art"],"a_peasant_levy":[1.0,0.95,1.05,"li"],"a_supply_carts":[0.25,1.0,1.25,"aux"],"a_early_arquebusiers":[1.0,0.95,1.05,"li"],"a_halberdiers":[1.0,1.0,1.0,"hi"],"a_light_lancers":[4.0,0.95,0.788,"lc"],"a_lancers":[4.0,1.0,0.75,"hc"],"a_falconet":[4.0,1.0,1.25,"art"],"a_matchlock_levy":[1.0,0.95,1.05,"li"],"a_supply_convoy":[0.25,1.0,1.25,"aux"],"a_arquebusiers":[1.5,0.95,1.05,"li"],"a_pikemen":[1.5,1.0,1.0,"hi"],"a_pistoleers":[4.0,0.95,0.788,"lc"],"a_heavy_lancers":[4.0,1.0,0.75,"hc"],"a_chambered_cannon":[5.0,1.0,1.25,"art"],"a_flintlock_levy":[1.5,0.95,1.05,"li"],"a_baggage_train":[0.25,1.0,1.25,"aux"],"a_hunters":[2.25,0.95,1.05,"li"],"a_musketeers":[2.25,1.0,1.0,"hi"],"a_hussars":[4.0,0.95,0.788,"lc"],"a_gallop_cavalry":[4.0,1.0,0.75,"hc"],"a_royal_mortar":[5.5,1.0,1.25,"art"],"a_militiamen":[2.25,0.95,1.05,"li"],"a_wagon_train":[0.25,1.0,1.25,"aux"],"a_sharpshooters":[3.0,0.95,1.05,"li"],"a_fusiliers":[3.0,1.0,1.0,"hi"],"a_light_dragoons":[4.0,0.95,0.788,"lc"],"a_cuirassiers":[4.0,1.0,0.75,"hc"],"a_flying_battery":[7.5,1.0,1.25,"art"],"a_conscripts":[3.0,0.95,1.05,"li"],"a_logistics_corps":[0.25,1.0,1.25,"aux"],"a_cawa":[1.0,1.0,0.95,"hi"],"a_renaissance_cawa":[1.0,1.0,0.95,"hi"],"a_discovery_cawa":[1.0,1.0,0.95,"hi"],"a_reformation_cawa":[1.5,1.0,0.95,"hi"],"a_absolutism_cawa":[2.25,1.0,0.95,"hi"],"a_revolutions_cawa":[3.0,1.0,0.95,"hi"],"a_indian_elephant_auxiliary":[2.0,1.0,1.25,"aux"],"a_indian_elephant_cavalry":[4.0,1.0,0.75,"hc"],"a_orissan_elephant_cavalry":[4.0,1.0,0.712,"hc"],"a_bengali_elephant_cavalry":[4.0,1.0,0.75,"hc"],"a_thai_elephant_cavalry":[4.0,1.0,0.75,"hc"],"a_siamese_advanced_elephant_cavalry":[4.0,1.125,0.75,"hc"],"a_khmer_ballista_elephant_infantry":[1.0,1.0,1.0,"hi"],"a_renaissance_janissaries":[1.0,1.0,0.9,"hi"],"a_discovery_janissaries":[1.0,1.0,0.9,"hi"],"a_reformation_janissaries":[1.5,1.0,0.9,"hi"],"a_absolutism_janissaries":[2.25,1.0,0.9,"hi"],"a_revolutions_janissaries":[3.0,1.0,0.9,"hi"],"a_discovery_qizilbash":[4.0,1.0,0.788,"lc"],"a_reformation_qizilbash":[4.0,1.05,0.788,"lc"],"a_legionaries_1":[1.0,1.0,0.9,"hi"],"a_legionaries_2":[1.0,1.0,0.9,"hi"],"a_legionaries_3":[1.0,1.0,0.9,"hi"],"a_legionaries_4":[1.5,1.0,0.9,"hi"],"a_legionaries_5":[2.25,1.0,0.9,"hi"],"a_legionaries_6":[3.0,1.0,0.9,"hi"],"a_byzantine_cataphracts_2":[4.0,1.165,0.656,"hc"],"a_byzantine_cataphracts_3":[4.0,1.165,0.656,"hc"],"a_byzantine_cataphracts_4":[4.0,1.165,0.656,"hc"],"a_byzantine_cataphracts_5":[4.0,1.165,0.656,"hc"],"a_byzantine_cataphracts_6":[4.0,1.165,0.656,"hc"],"a_varangians_2":[1.0,1.2,1.0,"hi"],"a_varangians_3":[1.0,1.2,1.0,"hi"],"a_varangians_4":[1.5,1.2,1.0,"hi"],"a_varangians_5":[2.25,1.2,1.0,"hi"],"a_varangians_6":[3.0,1.2,1.0,"hi"],"a_greek_fire_renaissance_infantry":[1.0,1.1,1.05,"li"],"a_greek_fire_discovery_infantry":[1.0,1.1,1.05,"li"],"a_bedouin_cavalry":[4.0,0.95,0.788,"lc"],"a_jaguar_warrior":[1.0,1.05,0.95,"hi"],"a_eagle_warrior":[1.0,0.95,1.05,"li"],"a_war_party":[1.0,0.95,1.05,"li"],"a_lodge_warriors":[1.0,1.0,1.0,"hi"]};
+
+// Military power. In combat a regiment deals combat power x men x (1 +
+// discipline) damage, levies only 75% of that (LAND_LEVY_COMBAT_IMPACT)
+// times (1 + levy combat ability), and with 10% less discipline (the
+// is_army_levy modifier); military tactics and discipline both
+// cut the damage it takes. So each side's punch is the sum of what its
+// regiments deal and its staying power the men it has over the damage they
+// take; by Lanchester's square law a force is worth sqrt(punch x staying
+// power). The score is in thousands of plain regular infantry (combat power
+// 1, no discipline, tactics 1), so a bare 10,000-man infantry army scores 10.
+const LAND_LEVY_COMBAT_IMPACT = 0.75;
+const LEVY_DISCIPLINE = -0.10;
+const BASE_TACTICS = 1;
+// Unraised levies: nobles ride as heavy cavalry, everyone else marches as
+// the current age's light infantry.
+const levyProfile = (age, nobles) =>
+  UNIT_STATS[`a_${age}_${nobles ? "heavy_cavalry" : "light_infantry"}`] ||
+  (nobles ? [4, 1, 0.75, "hc"] : [1, 0.95, 1.05, "li"]);
+// Unit categories, as the save's unit types and the *_power modifiers name them.
+const UNIT_CATS = ["li", "hi", "lc", "hc", "art", "aux"];
+const byCat = () => Object.fromEntries(UNIT_CATS.map((k) => [k, 0]));
+/* A combat sum: damage dealt per unit category (o), staying power (h), men. */
+const emptySum = () => ({ o: byCat(), h: 0, men: 0 });
+
 
 const prettyKey = (k) => String(k).replace(/_/g, " ").replace(/\s+/g, " ").trim();
 
-/* {discipline_est, levy_combat_est, mil_sources: [[label, d, l]], _ruler} */
+/* {discipline_est, levy_combat_est, tactics_est, unit_power: {category: bonus},
+    mil_sources: [[label, d, l, t, {category: bonus}]], _ruler} */
 function estimateMilitary(c, rulerId) {
   const S = MIL_SOURCES, src = [];
-  const addSrc = (label, m, scale = 1) => {
-    const d = (m.d || 0) * scale, l = (m.l || 0) * scale;
-    if (d || l) src.push([label, d, l]);
-  };
+  const addSrc = (label, m, scale = 1) => src.push(...milSource(label, m, scale));
   const gov = get(c, "government");
   const reforms = new Set();
   for (const e of asList(get(gov, "implemented_reforms"))) {
@@ -220,10 +251,50 @@ function estimateMilitary(c, rulerId) {
   return { mil_sources: src, _ruler: typeof rulerId === "string" ? rulerId : null, ...totalMilitary(src) };
 }
 
+/* [[label, d, l, t, {category: bonus}]] for one source, or [] if it gives none. */
+function milSource(label, m, scale = 1) {
+  const d = (m.d || 0) * scale, l = (m.l || 0) * scale, t = (m.t || 0) * scale;
+  const p = {};
+  for (const k of UNIT_CATS) if (m[k]) p[k] = m[k] * scale;
+  return d || l || t || Object.keys(p).length ? [[label, d, l, t, p]] : [];
+}
+
 function totalMilitary(src) {
-  let d = 0, l = 0;
-  for (const s of src) { d += s[1]; l += s[2]; }
-  return { discipline_est: d, levy_combat_est: l };
+  let d = 0, l = 0, t = BASE_TACTICS;
+  const p = byCat();
+  for (const s of src) {
+    d += s[1]; l += s[2]; t += s[3] || 0;
+    for (const [k, v] of Object.entries(s[4] || {})) if (k in p) p[k] += v;
+  }
+  return { discipline_est: d, levy_combat_est: l, tactics_est: t, unit_power: p };
+}
+
+/* Military power from a country's combat sums (see LAND_LEVY_COMBAT_IMPACT)
+   and its estimated discipline, levy combat ability, tactics and unit
+   category bonuses. Each sum is {o: {category: combat power x men x damage
+   done}, h: men / damage taken, men}. */
+function militaryPower(r, regSum, raisedSum, unraisedSum) {
+  // the category bonuses raise combat power, so they scale damage dealt
+  const dealt = (sum) => ({ o: UNIT_CATS.reduce((a, k) => a + sum.o[k] * Math.max(0, 1 + (r.unit_power[k] || 0)), 0),
+    h: sum.h, men: sum.men });
+  const reg = dealt(regSum), raised = dealt(raisedSum), unraised = dealt(unraisedSum);
+  const disc = Math.max(0.05, 1 + r.discipline_est);
+  // levies also take the is_army_levy modifier's -10% discipline
+  const levyDisc = Math.max(0.05, disc + LEVY_DISCIPLINE);
+  const levyQ = LAND_LEVY_COMBAT_IMPACT * Math.max(0, 1 + r.levy_combat_est);
+  const tac = Math.max(0.1, r.tactics_est);
+  const power = (o, h) => (o > 0 && h > 0 ? Math.sqrt(o * h) : 0);
+  const field = { o: reg.o * disc + raised.o * levyQ * levyDisc, h: (reg.h * disc + raised.h * levyDisc) * tac };
+  const full = { o: field.o + unraised.o * levyQ * levyDisc, h: field.h + unraised.h * levyDisc * tac };
+  const fullMen = reg.men + raised.men + unraised.men;
+  return {
+    mil_power: power(full.o, full.h),
+    mil_power_field: power(field.o, field.h),
+    mil_power_regulars: power(reg.o * disc, reg.h * disc * tac),
+    // what one man is worth, against plain regular infantry
+    mil_quality: fullMen ? power(full.o, full.h) / fullMen : 0,
+    mil_punch: full.o, mil_staying: full.h,
+  };
 }
 
 /* {institutions: [embraced, in age order], n_institutions,
@@ -257,12 +328,31 @@ async function attachRulerTraits(rows, save, sections) {
       const tm = body.match(/\n\ttraits=\{([^}]*)\}/);
       for (const t of tm ? tm[1].split(/\s+/).filter(Boolean) : []) {
         const def = MIL_SOURCES.trait[t];
-        if (def) r.mil_sources.push(["Ruler trait: " + prettyKey(t), def.d || 0, def.l || 0]);
+        if (def) r.mil_sources.push(...milSource("Ruler trait: " + prettyKey(t), def));
       }
       Object.assign(r, totalMilitary(r.mil_sources));
     }
   }
   for (const r of rows) delete r._ruler;
+}
+
+/* A country's combat sums with its levies not yet raised added in: the
+   potential levies beyond those already in the field, split between
+   nobles (cavalry) and everyone else (infantry) in the save's proportion. */
+function combatFigures(cs, potential, raised, nobleShare, age) {
+  const c = cs || { reg: emptySum(), raised: emptySum(), cls: byCat() };
+  const rest = Math.max(0, potential - raised);
+  const nob = potential > 0 ? rest * Math.min(1, nobleShare / potential) : 0;
+  const unraised = emptySum();
+  unraised.men = rest;
+  const cls = { ...c.cls };
+  for (const [men, nobles] of [[nob, true], [rest - nob, false]]) {
+    const p = levyProfile(age, nobles);
+    unraised.o[p[3]] += men * p[0] * p[1];
+    unraised.h += men / p[2];
+    cls[p[3]] += men;
+  }
+  return { reg: c.reg, raised: c.raised, unraised, cls };
 }
 
 /* Advances gained since the start: everything researched, minus the ones a
@@ -1571,6 +1661,9 @@ async function extract(save, sections, topAi = 0) {
   let m = metaTxt.match(/flag="([A-Z0-9]{2,3})=\{/);
   const youTag = m ? m[1] : null;
   const date = (metaTxt.match(/\n\tdate=([\d.]+)/) || [null, "?"])[1];
+  // The world's age sits just after the metadata; it sets what unraised
+  // levies would be armed as.
+  const age = ((await save.slice(0, 4 << 20).text()).match(/\ncurrent_age=(\w+)/) || [null, "age_1_traditions"])[1];
   const version = (metaTxt.match(/\n\tversion="([^"]+)"/) || [null, "?"])[1];
   const playthrough = (metaTxt.match(/\n\tplaythrough_id="([^"]+)"/) || [null, null])[1];
   const mp = metaTxt.includes("multiplayer=yes");
@@ -1648,6 +1741,7 @@ async function extract(save, sections, topAi = 0) {
   // Levies each pop type in a location can supply (thousands) - the
   // nearest thing the save has to a country's potential levies.
   const levyPot = new Counter();
+  const levyPotNoble = new Counter(); // the nobles' share: they ride as cavalry
   const locRecs = [];
   if (sections.has("locations")) {
     let ltext = await readSpan(save, ...sections.get("locations")[0]);
@@ -1672,7 +1766,10 @@ async function extract(save, sections, topAi = 0) {
         ctlSum.add(cid, parseFloat(ct[1]));
         if (dv) ctlWsum.add(cid, parseFloat(ct[1]) * parseFloat(dv[1]));
       }
-      for (const lv of part.matchAll(/\n\t\t\t\t\t\tlevies=([\d.]+)/g)) levyPot.add(cid, parseFloat(lv[1]));
+      for (const lv of part.matchAll(/\n\t\t\t\t\t(\w+)=\{[^{}]*?\n\t\t\t\t\t\tlevies=([\d.]+)/g)) {
+        levyPot.add(cid, parseFloat(lv[2]));
+        if (lv[1] === "nobles") levyPotNoble.add(cid, parseFloat(lv[2]));
+      }
       // per-location detail for the interactive map
       const lid = part.match(/^(\d+)=\{/);
       if (lid) {
@@ -1735,6 +1832,14 @@ async function extract(save, sections, topAi = 0) {
   const moraleW = { a: new Counter(), n: new Counter() }, expW = { a: new Counter(), n: new Counter() };
   const weight = { a: new Counter(), n: new Counter() };
   const companies = new Map(); // cid -> Set of hired mercenary company ids
+  // Combat sums for military power (see militaryPower): regulars and
+  // mercenaries together, raised levies apart; and men by unit class.
+  const combat = new Map(); // cid -> {reg, raised, cls: {category: men}}
+  const combatOf = (cid) => {
+    if (!combat.has(cid)) combat.set(cid, { reg: emptySum(), raised: emptySum(), cls: byCat() });
+    return combat.get(cid);
+  };
+  const unknownTypes = new Set();
 
   // Units belonging to a hired mercenary company. Available companies live
   // under mercenary_manager.pool; hired ones get a record in its database.
@@ -1784,8 +1889,18 @@ async function extract(save, sections, topAi = 0) {
       }
       army.add(cid, v);
       (isMerc ? mercs : isLevy ? levies : regulars).add(cid, v);
+      let us = UNIT_STATS[t[1]];
+      if (!us) { unknownTypes.add(t[1]); us = [1, 1, 1, "hi"]; }
+      // experience cuts damage taken by up to half (LAND_EXPERIENCE_DAMAGE_REDUCTION)
+      const xp = ex ? Math.min(1, parseFloat(ex[1])) : 0;
+      const cs = combatOf(cid), sum = isLevy ? cs.raised : cs.reg;
+      sum.o[us[3]] += v * us[0] * us[1];
+      sum.h += v / (us[2] * (1 - 0.5 * xp));
+      sum.men += v;
+      cs.cls[us[3]] += v;
     }
   }
+  if (unknownTypes.size) log("military power: unknown unit types counted as plain infantry: " + [...unknownTypes].join(", "));
 
   // ---- loans and bonds -------------------------------------------------
   // Each loan: amount (principal), interest (a yearly rate), month (months
@@ -1953,6 +2068,7 @@ async function extract(save, sections, topAi = 0) {
       levies: levies.val(cid), regulars: regulars.val(cid),
       mercs: mercs.val(cid), merc_companies: (companies.get(cid) || new Set()).size,
       levies_potential: levyPot.val(cid),
+      _combat: combatFigures(combat.get(cid), levyPot.val(cid), levies.val(cid), levyPotNoble.val(cid), age),
       ...institutionFigures(c, instPop.get(cid), instTot.val(cid), institutions),
       ...estimateMilitary(c, get(dictOr(get(c, "government")), "ruler")),
       army_morale: weight.a.val(cid) ? moraleW.a.val(cid) / weight.a.val(cid) : 0,
@@ -1994,6 +2110,11 @@ async function extract(save, sections, topAi = 0) {
   const locmap = { owners, ranks: ranksL, raws: rawsL, locs };
   Object.defineProperty(locmap, "ownerIdx", { value: ownerIdx, enumerable: false });
   await attachRulerTraits(rows, save, sections);
+  for (const r of rows) {
+    const cf = r._combat;
+    delete r._combat;
+    Object.assign(r, militaryPower(r, cf.reg, cf.raised, cf.unraised), { army_classes: cf.cls });
+  }
 
   let worldPop = 0;
   for (const c of countries.values()) worldPop += num(get(c, "last_months_population"));

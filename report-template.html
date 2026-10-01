@@ -122,6 +122,18 @@ td.l{text-align:left}
 .spark{display:block; margin-left:auto}
 .warnv{color:var(--alarm)}
 .pot{color:var(--ink-3)}
+.mbar{display:flex; height:6px; border-radius:3px; overflow:hidden; background:var(--surface-2);
+  margin-top:5px; min-width:90px}
+.mbar i{display:block; height:100%}
+.mbar .mf{background:var(--accent)}
+.mbar .ml{background:var(--accent); opacity:.35}
+.mkey{display:inline-block; width:10px; height:6px; border-radius:2px; background:var(--accent); vertical-align:middle; margin:0 4px 0 0}
+.mkey.ml{opacity:.35}
+#mil td span[title]{cursor:help; border-bottom:1px dotted var(--line)}
+.msub{display:block; font-size:11px; color:var(--ink-3); margin-top:2px}
+#mil .gs{border-left:1px solid var(--line)}
+#mil tr.mgrp th{cursor:default; font-size:10px; letter-spacing:.12em; color:var(--ink-3); padding:8px 9px 0; border-bottom:0}
+#mil tr.mgrp th.g{text-align:left; border-left:1px solid var(--line)}
 .delta{color:var(--verd); font-size:11.5px; margin-left:2px; white-space:nowrap}
 .delta.up{color:var(--verd)} .delta.dn{color:var(--alarm)} .delta.same{color:var(--ink-3)}
 .delta.new{color:var(--accent); font-family:Archivo,sans-serif; font-weight:600; font-size:10.5px;
@@ -273,6 +285,17 @@ footer{margin-top:56px; padding-top:22px; border-top:1px solid var(--line); colo
   <div class="tablewrap"><table id="lb"><thead><tr id="hrow"></tr></thead><tbody id="tb"></tbody></table></div>
   <details class="copywrap"><summary>&#9656; Show the Discord text (follows the sort above)</summary>
     <textarea id="dtext" readonly spellcheck="false"></textarea></details>
+</section>
+
+<section id="milsec" hidden>
+  <div class="sechead"><h2>Military strength</h2><span class="rule"></span><span class="eyebrow" style="margin:0" id="milrange"></span></div>
+  <p class="note" id="milnote"></p>
+  <div class="tablewrap"><table id="mil"></table></div>
+  <div class="mapactions">
+    <button class="btn" id="miltxt" type="button">Copy for Discord (text)</button>
+  </div>
+  <details class="copywrap"><summary>&#9656; Show the Discord text</summary>
+    <textarea id="miltext" readonly spellcheck="false"></textarea></details>
 </section>
 
 <section id="tlsec" hidden>
@@ -487,6 +510,15 @@ const SPEC={
   merc_companies:{bar:false,fmt:r=>r.merc_companies?int(r.merc_companies):dash},
   levies_potential:{fmt:r=>r.levies_potential?men(r.levies_potential):dash},
   discipline_est:{fmt:r=>bonus(r.discipline_est)}, levy_combat_est:{fmt:r=>bonus(r.levy_combat_est)},
+  tactics_est:{fmt:r=>r.tactics_est?f2(r.tactics_est):dash},
+  mil_power:{tip:"Military power with every levy raised, in thousands of plain regular infantry (see Military strength)",
+    fmt:r=>N(r.mil_power)?f1(r.mil_power):dash},
+  mil_power_field:{tip:"Military power of the regulars, mercenaries and levies under arms now",
+    fmt:r=>N(r.mil_power_field)?f1(r.mil_power_field):dash},
+  mil_power_regulars:{tip:"Military power of the regulars and mercenaries alone",
+    fmt:r=>N(r.mil_power_regulars)?f1(r.mil_power_regulars):dash},
+  mil_quality:{bar:false,tip:"Military power per 1,000 men: 1.00 is plain regular infantry",
+    fmt:r=>N(r.mil_quality)?f2(r.mil_quality):dash},
   army_morale:{fmt:r=>r.army_morale?f2(r.army_morale):dash},
   navy_morale:{fmt:r=>r.navy_morale?f2(r.navy_morale):dash},
   army_exp:{fmt:r=>r.army_exp?f1(r.army_exp):dash},
@@ -514,6 +546,7 @@ const INST_NAMES={feudalism:"Feudalism",legalism:"Legalism",meritocracy:"Meritoc
   artillery_institution:"Artillery",manufactories:"Manufactories",scientific_revolution:"Scientific Revolution",
   military_revolution:"Military Revolution",enlightenment:"Enlightenment",industrialization:"Industrialization",
   levee_en_masse:"Lev\u00e9e en Masse"};
+const UNIT_CAT_NAMES={li:"Light infantry",hi:"Heavy infantry",lc:"Light cavalry",hc:"Heavy cavalry",art:"Artillery",aux:"Support"};
 const instName=k=>INST_NAMES[k]||String(k).replace(/_/g," ").replace(/^./,c=>c.toUpperCase());
 const RANKED=new Set(["pop","taxbase","econbase","wealth","control","dev","locations",
                       "gold","income","total_produced","trade_value","army","levies",
@@ -617,8 +650,17 @@ function detailPanel(r){
       +kv("Army tradition",f1(r.army_tradition))
       +kv("Discipline bonus (est.)",bonus(r.discipline_est))
       +kv("Levy combat bonus (est.)",bonus(r.levy_combat_est))
+      +kv("Military tactics (est.)",r.tactics_est?f2(r.tactics_est):"&ndash;")
       +kv("Monthly upkeep",f1(r.army_upkeep))
       +kv("Men killed",int(r.kills),rk("kills")))
+  + (r.mil_power!=null?grp("Military power", kv("<b style='font-weight:600'>Every levy raised</b>",f1(r.mil_power),
+        '<b class="rank">'+ord(R.filter(q=>N(q.mil_power)>N(r.mil_power)).length+1)+' of '+R.length+' shown</b>')
+      +kv("In the field now",f1(r.mil_power_field))
+      +kv("Regulars &amp; mercenaries",f1(r.mil_power_regulars))
+      +kv("Per 1,000 men",f2(r.mil_quality))
+      +(r.army_classes?Object.keys(UNIT_CAT_NAMES).filter(k=>N(r.army_classes[k])||N((r.unit_power||{})[k]))
+        .map(k=>kv(UNIT_CAT_NAMES[k],men(r.army_classes[k])+" men"+(N((r.unit_power||{})[k])?" &middot; "+bonus(r.unit_power[k]):""))).join(""):"")
+      +'<div class="kv"><span style="font-size:11.5px;line-height:1.35">In thousands of plain regular infantry: see Military strength.</span></div>'):"")
   + grp("Navy", kv("Ships",r.navy?int(r.navy):"none")
       +kv("Levy ships",N(r.navy_levies)||"none")
       +kv("Regular ships",N(r.navy_regulars)||"none")
@@ -628,10 +670,12 @@ function detailPanel(r){
       +kv("Sailors",men(r.sailors)+" of "+men(r.max_sailors))
       +kv("Navy tradition",f1(r.navy_tradition))
       +kv("Monthly upkeep",f1(r.navy_upkeep)))
-  + '<div class="grp full"><h4>Discipline &amp; levy combat bonus &mdash; estimated from what the save records</h4><div class="chips">'
+  + '<div class="grp full"><h4>Discipline, levy combat, tactics &amp; unit bonuses &mdash; estimated from what the save records</h4><div class="chips">'
       + ((r.mil_sources||[]).length?(r.mil_sources||[]).map(s=>'<span class="chip">'+esc(s[0])
-        +(s[1]?'<b>'+bonus(s[1])+' disc.</b>':'')+(s[2]?'<b>'+bonus(s[2])+' levy</b>':'')+'</span>').join(""):'<span class="chip">no recorded sources</span>')
-      + '</div><div class="kv" style="margin-top:6px"><span style="font-size:11.5px;line-height:1.4">The game doesn&rsquo;t save these values, so this adds up advances, laws, privileges, reforms, societal values, event modifiers and ruler traits. It leaves out estate power, cabinet actions, religion, generals and automatic modifiers, and levy units also take &minus;10% discipline. Potential levies are the levy figures the save keeps for each location&rsquo;s pops, added up.</span></div></div>'
+        +(s[1]?'<b>'+bonus(s[1])+' disc.</b>':'')+(s[2]?'<b>'+bonus(s[2])+' levy</b>':'')
+        +(s[3]?'<b>'+(s[3]>0?"+":"")+f2(s[3])+' tactics</b>':'')
+        +Object.entries(s[4]||{}).map(([k,v])=>'<b>'+bonus(v)+' '+esc((UNIT_CAT_NAMES[k]||k).toLowerCase())+'</b>').join("")+'</span>').join(""):'<span class="chip">no recorded sources</span>')
+      + '</div><div class="kv" style="margin-top:6px"><span style="font-size:11.5px;line-height:1.4">The game doesn&rsquo;t save these values, so this adds up advances, laws, privileges, reforms, societal values, event modifiers and ruler traits, on top of the base military tactics of 1. It leaves out estate power, cabinet actions, religion, generals and automatic modifiers, and levy units also take &minus;10% discipline. Potential levies are the levy figures the save keeps for each location&rsquo;s pops, added up.</span></div></div>'
   + grp("State", kv("Great power rank",r.gp_rank>900?"unranked":"#"+r.gp_rank)
       +kv("Great power points",f1(r.gp_points))+kv("World score place",'#'+int(r.score_place))
       +kv("ADM / DIP / MIL",f1(r.score.ADM)+" / "+f1(r.score.DIP)+" / "+f1(r.score.MIL))
@@ -902,7 +946,7 @@ function chartPng(svg,title,sub){
     {k:"taxbase",t:"Tax base",hist:"tax_hist"},
     {k:"econbase",t:"Econ base",hist:"econ_hist"},
     {k:"income",t:"Income"},{k:"locations",t:"Locations"},{k:"dev",t:"Development"},
-    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"discipline_est",t:"Discipline (est.)",fmt:v=>bonus(v)},{k:"levy_combat_est",t:"Levy combat (est.)",fmt:v=>bonus(v)},{k:"advances",t:"Advances"},{k:"n_institutions",t:"Institutions"},{k:"research_paid",t:"Research paid (est.)"},{k:"gold",t:"Gold"},{k:"debt",t:"Debt"},{k:"debt_cost",t:"Debt cost / month"},
+    {k:"army",t:"Army",fmt:v=>v?men(v):"0"},{k:"navy",t:"Ships"},{k:"discipline_est",t:"Discipline (est.)",fmt:v=>bonus(v)},{k:"levy_combat_est",t:"Levy combat (est.)",fmt:v=>bonus(v)},{k:"mil_power",t:"Military power"},{k:"advances",t:"Advances"},{k:"n_institutions",t:"Institutions"},{k:"research_paid",t:"Research paid (est.)"},{k:"gold",t:"Gold"},{k:"debt",t:"Debt"},{k:"debt_cost",t:"Debt cost / month"},
     {k:"prestige",t:"Prestige"},{k:"gp_rank",t:"Great-power rank",invert:true}
   ];
   const num=v=>{const a=Math.abs(v); return a>=1000?int(v):a>=100?String(Math.round(v)):a>=10?String(+v.toFixed(1)):String(+v.toFixed(2));};
@@ -1412,7 +1456,7 @@ function xlCol(k){
   if(k==="loan_interest"||k==="bond_interest") return {h:t+" (yearly)",w:13,style:"pct1",v:r=>N(r[k==="loan_interest"?"loans":"bonds"])?N(r[k]):null};
   if(k==="inflation") return {h:"Inflation (%)",w:11,style:"d2",v:r=>N(r[k])};
   if(WHOLE.has(k)) return {h:t,w:12,style:"int",v:r=>Math.round(N(r[k]))};
-  if(/morale|_exp$|creditworthiness|coin_minting/.test(k)) return {h:t,w:12,style:"d2",v:r=>N(r[k])};
+  if(/morale|_exp$|creditworthiness|coin_minting|tactics_est|mil_quality/.test(k)) return {h:t,w:12,style:"d2",v:r=>N(r[k])};
   return {h:t,w:12,style:"d1",v:r=>N(r[k])};
 }
 const NATION_COLS=[
@@ -1902,6 +1946,117 @@ const LIVE=(function(){
     const btn=this, lbl=btn.textContent;
     try{ await navigator.clipboard.writeText(txt); btn.textContent="Copied"; btn.classList.add("ok"); }
     catch(e){ const t=$("insttext"); t.closest("details").open=true; t.select(); btn.textContent="Press Ctrl+C"; }
+    setTimeout(()=>{btn.textContent=lbl; btn.classList.remove("ok");},2200);
+  };
+})();
+
+/* ---- military strength: a ranked, sortable power table ---- */
+(function(){
+  if(!R.some(r=>r.mil_power!=null)) return;
+  $("milsec").hidden=false;
+  const top=Math.max(...R.map(r=>N(r.mil_power)),1e-9);
+  const up=(r,k)=>N((r.unit_power||{})[k]);
+  const ac=(r,k)=>N((r.army_classes||{})[k]);
+  // hover text: every source behind one figure
+  const tipOf=(r,i,k,f)=>{
+    const lines=(r.mil_sources||[]).map(s=>[s[0],k?N((s[4]||{})[k]):N(s[i])]).filter(x=>x[1]).map(x=>x[0]+": "+f(x[1]));
+    return esc(lines.length?lines.join("\n"):"no recorded sources");
+  };
+  const pctTip=v=>bonus(v), tacTip=v=>(v>0?"+":"")+f2(v);
+  const cell=(main,sub,tip)=>'<span title="'+tip+'">'+main+'</span>'+(sub?'<span class="msub">'+sub+'</span>':'');
+  const cats=Object.keys(UNIT_CAT_NAMES).filter(k=>R.some(r=>ac(r,k)>=0.0005||up(r,k)));
+  const SHORT={li:"Lt inf",hi:"Hvy inf",lc:"Lt cav",hc:"Hvy cav",art:"Artillery",aux:"Support"};
+  $("milrange").textContent="in thousands of plain regular infantry";
+  $("milnote").innerHTML='One number for how hard each nation&rsquo;s army hits and how long it lasts. In battle a regiment deals '
+    +'<em>combat power &times; men &times; (1 + discipline)</em> damage &mdash; cavalry has 4 combat power to infantry&rsquo;s 1, artillery 2, '
+    +'support units &frac14; &mdash; and levies only 75% of that, times (1 + levy combat ability), with 10% less discipline. The damage it takes is cut by '
+    +'military tactics, discipline, experience and its unit type&rsquo;s armour. A side&rsquo;s strength is &radic;(damage dealt &times; damage it can take), '
+    +'Lanchester&rsquo;s square law, so doubling an army doubles its score. <b>1.0</b> is 1,000 plain regular infantry with no discipline '
+    +'and tactics 1. <span class="mkey"></span>under arms now, <span class="mkey ml"></span>with every levy raised. '
+    +'Unraised levies count as the age&rsquo;s cavalry for nobles and its infantry for everyone else. Advances, laws and the like also raise '
+    +'one unit type&rsquo;s combat power (e.g. +10% heavy infantry); those bonuses scale the damage that type deals. Hover any modifier for its sources. '
+    +'Discipline, levy combat, tactics and unit bonuses are estimates (religion, estates and generals aren&rsquo;t counted); morale, terrain, supply '
+    +'and combined arms are left out.';
+  const C=[
+    {k:"_rank",t:"#"},
+    {k:"tag",t:"Nation",l:true},
+    {k:"mil_power",t:"Power",f:r=>'<b>'+f1(r.mil_power)+'</b><span class="mbar" title="'+f1(r.mil_power_field)+' in the field now, '+f1(r.mil_power)+' with every levy raised">'
+      +'<i class="mf" style="width:'+(N(r.mil_power_field)/top*100).toFixed(1)+'%"></i>'
+      +'<i class="ml" style="width:'+(Math.max(0,N(r.mil_power)-N(r.mil_power_field))/top*100).toFixed(1)+'%"></i></span>'},
+    {k:"mil_power_field",t:"In field",f:r=>N(r.mil_power_field)?f1(r.mil_power_field):dash},
+    {k:"discipline_est",t:"Discipline",grp:true,f:r=>cell(bonus(r.discipline_est),"levies "+bonus(N(r.discipline_est)-0.1),tipOf(r,1,null,pctTip))},
+    {k:"tactics_est",t:"Tactics",f:r=>cell(r.tactics_est?f2(r.tactics_est):dash,"",esc("Base: 1.00\n")+tipOf(r,3,null,tacTip))},
+    {k:"levy_combat_est",t:"Levy combat",f:r=>cell(bonus(r.levy_combat_est),"&times;"+f2(0.75*(1+N(r.levy_combat_est)))+" dmg",tipOf(r,2,null,pctTip))},
+    ...cats.map((k,i)=>({k:"_up_"+k,t:SHORT[k],grp:i===0,v:r=>up(r,k),
+      f:r=>cell(up(r,k)?bonus(up(r,k)):'<span class="zero">+0%</span>',ac(r,k)>=0.0005?men(ac(r,k))+" men":"",
+        esc(UNIT_CAT_NAMES[k]+" combat power\n")+tipOf(r,0,k,pctTip))})),
+    {k:"mil_quality",t:"Per 1k men",grp:true,f:r=>N(r.mil_quality)?f2(r.mil_quality):dash},
+    {k:"army",t:"Men",f:r=>N(r.army)?men(r.army):dash},
+    {k:"_reg",t:"Regulars",f:r=>N(r.regulars)+N(r.mercs)?men(N(r.regulars)+N(r.mercs)):dash,v:r=>N(r.regulars)+N(r.mercs)}
+  ];
+  const rankOf=new Map([...R].sort((a,b)=>N(b.mil_power)-N(a.mil_power)).map((r,i)=>[r.id,i]));
+  const val=(c,r)=>c.k==="_rank"?-rankOf.get(r.id):c.v?c.v(r):N(r[c.k]);
+  let key="mil_power", asc=false;
+  function draw(){
+    const kc=C.find(c=>c.k===key);
+    const rows=[...R].sort((a,b)=>{
+      const c=key==="tag"?String(a.tag).localeCompare(String(b.tag)):val(kc,a)-val(kc,b);
+      return asc?c:-c;
+    });
+    let h='<thead><tr>';
+    // a header row naming the two groups of modifiers
+    const gi=C.findIndex(c=>c.k==="discipline_est"), qi=C.findIndex(c=>c.k==="mil_quality");
+    const ui=C.findIndex(c=>c.k.startsWith("_up_"));
+    h+='<tr class="mgrp"><th colspan="'+gi+'"></th><th colspan="'+((ui<0?qi:ui)-gi)+'" class="g">Army-wide modifiers (est.)</th>'
+      +(ui<0?'':'<th colspan="'+(qi-ui)+'" class="g">Combat power bonus by unit type (est.) &middot; men of that type</th>')
+      +'<th colspan="'+(C.length-qi)+'" class="g">Army</th></tr><tr>';
+    C.forEach(c=>{
+      h+='<th class="'+(c.l?'l':'')+(c.grp?' gs':'')+'" tabindex="0" data-k="'+c.k+'"'
+       +(c.k===key?' aria-sort="'+(asc?"ascending":"descending")+'"':'')+'>'+c.t
+       +'<span class="car">'+(c.k===key?(asc?"&#9650;":"&#9660;"):"&#9660;")+'</span></th>';
+    });
+    h+='</tr></thead><tbody>';
+    rows.forEach(r=>{
+      const fl=r.flag?'<img class="flag" src="'+esc(r.flag)+'" alt="">':'<span class="flag ph"'+(r.color?' style="background:'+esc(r.color)+'"':'')+'></span>';
+      const who=r.is_player?esc(r.player):'<span class="ai">AI</span>';
+      const i=rankOf.get(r.id);
+      h+='<tr class="row" style="cursor:default">';
+      C.forEach(c=>{
+        if(c.k==="_rank") h+='<td class="gp'+(i<3?' top':'')+'">'+(i+1)+'</td>';
+        else if(c.l) h+='<td class="l"><div class="nat">'+fl+'<span class="tag">'+esc(r.tag)+'</span>'
+          +'<span><span class="natname">'+esc(r.name)+'</span><br><span class="player">'+who+'</span></span></div></td>';
+        else h+='<td class="num'+(c.grp?' gs':'')+'">'+c.f(r)+'</td>';
+      });
+      h+='</tr>';
+    });
+    const t=$("mil"); t.innerHTML=h+'</tbody>';
+    t.querySelectorAll("thead th[data-k]").forEach(el=>{
+      const go=()=>{ const k=el.dataset.k;
+        if(k===key) asc=!asc; else { key=k; asc=(k==="tag"); }
+        draw(); };
+      el.onclick=go; el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};
+    });
+  }
+  draw();
+  function milText(){
+    const rows=[...R].sort((a,b)=>N(b.mil_power)-N(a.mil_power));
+    const head="**Military strength · "+W.date+"**  ·  1.0 = 1,000 plain regular infantry; Power = every levy raised, Field = under arms now";
+    const bc=cats.filter(k=>R.some(r=>up(r,k)));
+    const pc=v=>v?(v>0?"+":"")+Math.round(v*100)+"%":"-";
+    const hr=" #  Tag   Power  Field   /1k  Men        Disc  Tact   Levy"+bc.map(k=>" "+SHORT[k].replace(" ","").slice(0,6).padStart(6)).join("");
+    const lines=rows.map((r,i)=>String(i+1).padStart(2)+"  "+r.tag.padEnd(4)+f1(r.mil_power).padStart(7)+f1(r.mil_power_field).padStart(7)
+      +f2(r.mil_quality).padStart(6)+"  "+men(r.army).padEnd(9)+bonus(r.discipline_est).padStart(6)+f2(r.tactics_est).padStart(6)+bonus(r.levy_combat_est).padStart(7)
+      +bc.map(k=>" "+pc(up(r,k)).padStart(6)).join(""));
+    let n=lines.length, out;
+    do { out=head+"\n```\n"+[hr,...lines.slice(0,n)].join("\n")+"\n```"; n--; } while(out.length>2000&&n>0);
+    return out;
+  }
+  const txt=milText();
+  $("miltext").value=txt;
+  $("miltxt").onclick=async function(){
+    const btn=this, lbl=btn.textContent;
+    try{ await navigator.clipboard.writeText(txt); btn.textContent="Copied"; btn.classList.add("ok"); }
+    catch(e){ const t=$("miltext"); t.closest("details").open=true; t.select(); btn.textContent="Press Ctrl+C"; }
     setTimeout(()=>{btn.textContent=lbl; btn.classList.remove("ok");},2200);
   };
 })();

@@ -23,6 +23,8 @@ const FIELDS = {
   army: "Army", levies: "Levies", regulars: "Regulars", mercs: "Mercs",
   merc_companies: "Merc. companies", army_morale: "Army morale", army_exp: "Army exp.",
   levies_potential: "Potential levies", discipline_est: "Discipline (est.)", levy_combat_est: "Levy combat (est.)",
+  tactics_est: "Tactics (est.)", mil_power: "Military power", mil_power_field: "Power in field",
+  mil_power_regulars: "Regulars' power", mil_quality: "Power / 1k men",
   subunits: "Regiments", manpower: "Manpower",
   max_manpower: "Manpower pool", army_tradition: "Army trad.", army_upkeep: "Army upkeep",
   navy: "Ships", navy_levies: "Levy ships", navy_regulars: "Regular ships", navy_mercs: "Merc. ships",
@@ -37,7 +39,7 @@ const FIELDS = {
 };
 const DEFAULT_CONFIG = {
   standings: ["gp_rank", "tag", "pop", "taxbase", "econbase", "wealth",
-    "control", "locations", "levies", "regulars", "mercs"],
+    "control", "locations", "levies", "regulars", "mercs", "mil_power"],
   ledger: ["tag", "kills", "war_battle", "war_attrition", "wars", "rebels",
     "army_tradition"],
 };
@@ -103,9 +105,9 @@ function sanitizeData(d) {
       else if (k === "is_player") o[k] = v === true;
       else if (k === "flag") { if (isPng(v)) o[k] = v; }
       else if (k === "color") o[k] = typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v) ? v : null;
-      else if (k === "mil_sources") o[k] = Array.isArray(v) ? v.filter(Array.isArray).map((s) => [str(s[0]), numOr0(s[1]), numOr0(s[2])]) : [];
+      else if (k === "mil_sources") o[k] = Array.isArray(v) ? v.filter(Array.isArray).map((s) => [str(s[0]), numOr0(s[1]), numOr0(s[2]), numOr0(s[3]), numMap(s[4])]) : [];
       else if (k === "institutions") o[k] = Array.isArray(v) ? v.map(str).filter((x) => /^\w{1,60}$/.test(x)) : [];
-      else if (["goods", "raw", "ranks", "score", "inst_presence", "adv_by_inst", "research_by_inst"].includes(k)) o[k] = numMap(v);
+      else if (["goods", "raw", "ranks", "score", "inst_presence", "adv_by_inst", "research_by_inst", "army_classes", "unit_power"].includes(k)) o[k] = numMap(v);
       else if (k.endsWith("_hist") || k === "adv_by_age") o[k] = numList(v);
       else o[k] = numOr0(v);
     }
