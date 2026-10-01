@@ -48,7 +48,7 @@
 .plan .nm small{font-weight:400; color:var(--ink-3); margin-left:6px}
 .plan .g{font-family:"IBM Plex Mono",monospace; font-size:13.5px; color:var(--verd); font-variant-numeric:tabular-nums}
 .plan .why{grid-column:2/-1; font-size:12.5px; color:var(--ink-3)}
-.plan .none{color:var(--ink-3); font-size:14px}
+.plan .none{grid-column:1/-1; color:var(--ink-3); font-size:14px}
 .chip{display:inline-block; font:600 10.5px/1.6 Archivo,sans-serif; letter-spacing:.06em; text-transform:uppercase;
   border-radius:3px; padding:0 6px; margin-left:6px; vertical-align:1px; border:1px solid currentColor}
 .chip.ready{color:var(--verd)}

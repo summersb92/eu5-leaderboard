@@ -193,9 +193,9 @@ function analyze({ cid, govs: K, eligibleOnly, pendingBuilt }) {
     fit: { scale: r3(cg.scale), mae: r3(st.fit.mae), within5: r3(st.fit.within5) },
     now: { taxSaved: r3(locs.reduce((s, i) => s + S.tax[i], 0)), taxPossible: r3(locs.reduce((s, i) => s + S.ptax[i], 0)),
       settled: r3(baseScore), avg: r3(avgOf(base, st)) },
-    govRank: govRank.slice(0, 25).map(label),
+    govRank: govRank.map(label),
     plan: { picks: plan.picks.map(label), gain: r3(plan.gain), avg: r3(avgOf(plan.field, st)) },
-    capRank: capRank.slice(0, 15).map(label),
+    capRank: capRank.map(label),
     joint: { capital: label({ loc: joint.capital, gain: 0 }), govs: joint.govs.map(label), gain: r3(joint.gain), avg: r3(avgOf(joint.field, st)) },
     map: {
       locs, xy: locs.flatMap((i) => [G.xy[2 * i], G.xy[2 * i + 1]]),

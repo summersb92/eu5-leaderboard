@@ -124,6 +124,12 @@ counts as finished unless you untick that too.
 | `placement.html`, `css/placement.css`, `js/placement.js` | Page, results, proximity map |
 | `js/placement-worker.js` | Reads the save (via `worker.js`) and runs the searches |
 | `js/proximity.js` | The proximity model; also loads in Node for testing |
+
+Both tables sort by clicking a column header (the # column keeps each
+location's place in the model's ranking) and filter by minimum tax base
+gained, location, rank, and whether a governor can be built there or the
+capital's average proximity; they list every location, not just the top
+few. The table code is shared with the rights advisor in `js/grid.js`.
 | `tools/build_proximity_graph.js` | Builds `gamedata/<version>/proximity.json` |
 
 ### Placement model

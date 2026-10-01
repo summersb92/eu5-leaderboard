@@ -157,17 +157,42 @@ function renderPlans(d) {
   planList($("jointplan"), items, "");
 }
 
+// Sortable, filterable tables (js/grid.js). Rank is each row's place in the
+// model's own ranking, so it stays put when the table is re-sorted.
+const { grid } = EU5Grid("eu5-placement-grids");
+const RANK_ORDER = ["Rural", "Town", "City", "Megalopolis"];
+const F_Q = { type: "q", key: "name", label: "Location" };
+const F_RANK = { type: "select", key: "rank", label: "Rank", order: (k) => RANK_ORDER.indexOf(k) };
+const sgn = (v) => (v > 0.005 ? "pos" : v < -0.005 ? "neg" : "");
+
 function renderTables(d) {
-  $("govtable").innerHTML = "<thead><tr><th>#</th><th>Location</th><th>Rank</th><th>Can build?</th><th class=n>+Tax base</th></tr></thead><tbody>" +
-    d.govRank.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td>${esc(r.rank)}</td><td>${statusChip(r.status)}</td>` +
-      `<td class="n ${r.gain > 0 ? "pos" : ""}">${fmt(r.gain)}</td></tr>`).join("") + "</tbody>";
+  const govRows = d.govRank.map((r, i) => ({ ...r, no: i + 1 }));
+  grid("govtable", [
+    { key: "no", label: "#", num: true, sort: (r) => -r.no, cell: (r) => r.no },
+    { key: "name", label: "Location", sort: (r) => r.name, cell: (r) => esc(r.name) },
+    { key: "rank", label: "Rank", sort: (r) => RANK_ORDER.indexOf(r.rank), cell: (r) => esc(r.rank) },
+    { key: "status", label: "Can build?", sort: (r) => Object.keys(STATUS).indexOf(r.status), cell: (r) => statusChip(r.status) },
+    { key: "gain", label: "+Tax base", num: true, sort: (r) => r.gain, cell: (r) => fmt(r.gain), cls: (r) => (r.gain > 0 ? "pos" : "") },
+  ], govRows, { sort: "gain", click: false, empty: "No location to try.", filters: [
+    { type: "min", key: "gain", label: "Min +tax base", step: 0.1 }, F_Q, F_RANK,
+    { type: "select", key: "status", label: "Can build?", options: Object.entries(STATUS).map(([k, v]) => [k, v[1]]) },
+  ] });
+
   const cur = d.capRank.findIndex((r) => r.loc === d.capital.loc);
   $("capsub").textContent = `Every location tried as the capital, keeping the governors you have. ` +
-    (cur === 0 ? `${d.capital.name} is already the best.` : cur > 0 ? `${d.capital.name} ranks ${cur + 1}.` : `${d.capital.name} isn't in the top 15.`);
-  $("captable").innerHTML = "<thead><tr><th>#</th><th>Location</th><th>Rank</th><th class=n>Avg prox.</th><th class=n>+Tax base</th></tr></thead><tbody>" +
-    d.capRank.map((r, i) => `<tr class="${r.loc === d.capital.loc ? "cur" : ""}"><td>${i + 1}</td><td>${esc(r.name)}` +
-      `${r.loc === d.capital.loc ? ' <span class="chip now">Current</span>' : ""}</td><td>${esc(r.rank)}</td>` +
-      `<td class=n>${r.avg.toFixed(0)}</td><td class="n ${r.gain > 0.005 ? "pos" : r.gain < -0.005 ? "neg" : ""}">${fmt(r.gain)}</td></tr>`).join("") + "</tbody>";
+    (cur === 0 ? `${d.capital.name} is already the best.` : cur > 0 ? `${d.capital.name} ranks ${cur + 1} of ${d.capRank.length}.` : "");
+  const capRows = d.capRank.map((r, i) => ({ ...r, no: i + 1, current: r.loc === d.capital.loc, cls: r.loc === d.capital.loc ? "cur" : "" }));
+  grid("captable", [
+    { key: "no", label: "#", num: true, sort: (r) => -r.no, cell: (r) => r.no },
+    { key: "name", label: "Location", sort: (r) => r.name,
+      cell: (r) => `${esc(r.name)}${r.current ? ' <span class="chip now">Current</span>' : ""}` },
+    { key: "rank", label: "Rank", sort: (r) => RANK_ORDER.indexOf(r.rank), cell: (r) => esc(r.rank) },
+    { key: "avg", label: "Avg prox.", num: true, sort: (r) => r.avg, cell: (r) => r.avg.toFixed(0) },
+    { key: "gain", label: "+Tax base", num: true, sort: (r) => r.gain, cell: (r) => fmt(r.gain), cls: (r) => sgn(r.gain) },
+  ], capRows, { sort: "gain", click: false, filters: [
+    { type: "min", key: "gain", label: "Min +tax base", step: 0.1 },
+    { type: "min", key: "avg", label: "Min avg prox.", step: 1 }, F_Q, F_RANK,
+  ] });
 }
 
 // ---------------------------------------------------------------- map

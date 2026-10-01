@@ -146,88 +146,17 @@ function renderTiles(d) {
     tile("Places to urbanise", String(fut), "rural locations whose RGO, or a guild fed by it, a right would boost &mdash; see Future towns", false);
 }
 
-// ---------------------------------------------------------------- sortable, filterable tables
-/* grid(id, cols, rows, opts): draws table #id from row objects.
-   cols: [{key, label, num, sort: (row) => value, cell: (row) => html, cls}]
-   rows carry the fields the filters read: name, rank, right, gold, free.
-   opts.filters: any of "min", "q", "rank", "right", "free"; their bar goes
-   in #<id>-f. Sort and filter choices last across re-renders and visits. */
-const GRID_KEY = "eu5-rights-grids";
-const gridState = (() => { try { return JSON.parse(localStorage.getItem(GRID_KEY)) || {}; } catch (e) { return {}; } })();
-const saveGrids = () => { try { localStorage.setItem(GRID_KEY, JSON.stringify(gridState)); } catch (e) {} };
-const gridData = {};
-
-function grid(id, cols, rows, opts = {}) {
-  if (!gridState[id]) gridState[id] = { sort: opts.sort || null, desc: true, f: {} };
-  gridData[id] = { cols, rows, opts };
-  if (opts.filters && opts.filters.length) filterBar(id, opts);
-  drawGrid(id);
-}
-
-function filterBar(id, opts) {
-  const box = $(id + "-f"), st = gridState[id].f, d = current;
-  if (!box) return;
-  const has = (k) => opts.filters.includes(k);
-  const rights = [...new Set(gridData[id].rows.map((r) => r.right).filter(Boolean))].sort((a, b) => d.rname(a).localeCompare(d.rname(b)));
-  const ranks = ["rural_settlement", "town", "city", "megalopolis"].filter((k) => gridData[id].rows.some((r) => r.rank === k));
-  box.innerHTML =
-    (has("min") ? `<label class="fl"><span>Min gold/mo</span><input type="number" step="0.5" data-k="min" value="${st.min ?? ""}" placeholder="any"></label>` : "") +
-    (has("q") ? `<label class="fl"><span>Location</span><input type="search" data-k="q" value="${esc(st.q || "")}" placeholder="name…"></label>` : "") +
-    (has("rank") ? `<label class="fl"><span>Rank</span><select data-k="rank"><option value="">all</option>${ranks.map((k) =>
-      `<option value="${k}"${st.rank === k ? " selected" : ""}>${RANKS[k] || k}</option>`).join("")}</select></label>` : "") +
-    (has("right") ? `<label class="fl"><span>Right</span><select data-k="right"><option value="">all</option>${rights.map((k) =>
-      `<option value="${k}"${st.right === k ? " selected" : ""}>${esc(d.rname(k))}</option>`).join("")}</select></label>` : "") +
-    (has("free") ? `<label class="chk fl"><input type="checkbox" data-k="free"${st.free ? " checked" : ""}> Free slot only</label>` : "") +
-    `<button type="button" class="linkbtn" data-reset>Clear filters</button><span class="flcount" id="${id}-n"></span>`;
-  box.oninput = box.onchange = (e) => {
-    const el = e.target, k = el.dataset.k;
-    if (!k) return;
-    st[k] = el.type === "checkbox" ? el.checked : el.type === "number" ? (el.value === "" ? null : +el.value) : el.value;
-    saveGrids();
-    drawGrid(id);
-  };
-  box.querySelector("[data-reset]").onclick = () => { gridState[id].f = {}; saveGrids(); filterBar(id, opts); drawGrid(id); };
-}
-
-function drawGrid(id) {
-  const { cols, rows, opts } = gridData[id], st = gridState[id], f = st.f;
-  const q = (f.q || "").trim().toLowerCase();
-  let list = rows.filter((r) =>
-    (f.min == null || (r.gold ?? 0) >= f.min) && (!q || (r.name || "").toLowerCase().includes(q)) &&
-    (!f.rank || r.rank === f.rank) && (!f.right || r.right === f.right) && (!f.free || r.free));
-  const col = cols.find((c) => c.key === st.sort);
-  if (col && col.sort) {
-    const dir = st.desc ? -1 : 1;
-    list = [...list].sort((a, b) => {
-      const x = col.sort(a), y = col.sort(b);
-      if (x == null || x === "") return y == null || y === "" ? 0 : 1;
-      if (y == null || y === "") return -1;
-      return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y))) * dir;
-    });
-  }
-  const t = $(id);
-  t.innerHTML = "<thead><tr>" + cols.map((c) => {
-    const on = c.key === st.sort, arrow = on ? (st.desc ? " ▼" : " ▲") : "";
-    return `<th class="${c.num ? "n" : ""}${c.sort ? " sortable" : ""}" data-key="${c.key}"` +
-      `${c.sort ? ` aria-sort="${on ? (st.desc ? "descending" : "ascending") : "none"}" title="Sort by ${esc(c.label || "this")}"` : ""}>${c.label}${arrow}</th>`;
-  }).join("") + "</tr></thead><tbody>" +
-    (list.length ? list.map((r) => `<tr class="${r.cls || ""}${r.loc != null ? " click" : ""}"${r.loc != null ? ` data-loc="${r.loc}"` : ""}>` +
-      cols.map((c) => `<td class="${c.num ? "n " : ""}${c.cls ? (typeof c.cls === "function" ? c.cls(r) : c.cls) : ""}">${c.cell(r)}</td>`).join("") + "</tr>").join("")
-      : `<tr><td colspan="${cols.length}" class="dim">${rows.length ? "Nothing matches the filters." : esc(opts.empty || "Nothing here.")}</td></tr>`) + "</tbody>";
-  t.querySelectorAll("th.sortable").forEach((th) => th.addEventListener("click", () => {
-    const k = th.dataset.key, c = cols.find((x) => x.key === k);
-    if (st.sort === k) st.desc = !st.desc;
-    else { st.sort = k; st.desc = !!c.num; }
-    saveGrids();
-    drawGrid(id);
-  }));
-  const n = $(id + "-n");
-  if (n) n.textContent = list.length === rows.length ? `${rows.length} shown` : `${list.length} of ${rows.length} shown`;
-}
+// ---------------------------------------------------------------- tables (js/grid.js)
+const { grid } = EU5Grid("eu5-rights-grids");
+const rankOrder = (k) => ["rural_settlement", "town", "city", "megalopolis"].indexOf(k);
+const F_MIN = { type: "min", key: "gold", label: "Min gold/mo" };
+const F_Q = { type: "q", key: "name", label: "Location" };
+const F_RANK = { type: "select", key: "rank", label: "Rank", text: (k) => RANKS[k] || k, order: rankOrder };
+const F_RIGHT = { type: "select", key: "right", label: "Right", text: (k) => current.rname(k) };
+const F_FREE = { type: "check", key: "free", label: "Free slot only" };
 
 const nameCell = (x) => `${esc(x.r.name)}${slotChip(x.r)}`;
 const goldCls = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
-const rankOrder = (k) => ["rural_settlement", "town", "city", "megalopolis"].indexOf(k);
 
 function renderRecs(d) {
   const recs = [];
@@ -249,7 +178,7 @@ function renderRecs(d) {
     { key: "gold", label: "Gold/mo", num: true, sort: (x) => x.gold, cell: (x) => fmt(x.gold), cls: (x) => goldCls(x.gold) },
     { key: "why", label: "Where it comes from", cls: "wrap", cell: (x) => `<small>${breakdown(d, x.v)}</small>` },
     { key: "has", label: "Has", sort: (x) => x.r.have.length, cell: (x) => haveChips(d, x.r) },
-  ], recs, { filters: ["min", "q", "rank", "right", "free"], sort: "gold", empty: "No grant pays." });
+  ], recs, { filters: [F_MIN, F_Q, F_RANK, F_RIGHT, F_FREE], sort: "gold", empty: "No grant pays." });
 
   const towns = d.rows.filter((r) => r.slots > 0).map((r) => {
     const ok = r.values.filter((v) => !v.blocked);
@@ -267,7 +196,7 @@ function renderRecs(d) {
     { key: "second", label: "2nd", num: true, sort: (x) => (x.b ? x.b.net : null),
       cell: (x) => (x.b ? `${esc(d.rname(x.b.right))} <small>${fmt(x.b.net)}</small>` : "") },
     { key: "has", label: "Has", sort: (x) => x.r.have.length, cell: (x) => haveChips(d, x.r) },
-  ], towns, { filters: ["min", "q", "rank", "right", "free"], sort: "gold" });
+  ], towns, { filters: [F_MIN, F_Q, F_RANK, F_RIGHT, F_FREE], sort: "gold" });
 }
 
 function renderFuture(d) {
@@ -299,7 +228,7 @@ function renderFuture(d) {
       cell: (x) => (x.chain ? `${x.chain.levels.toFixed(1)}${x.chain.uses < 0.99 ? `<br><small>uses ${Math.round(x.chain.uses * 100)}%</small>` : ""}` : "") },
     { key: "mg", label: "Margin/lvl", num: true, sort: (x) => (x.chain ? x.chain.margin : null), cell: (x) => (x.chain ? fmt(x.chain.margin) : ""), cls: (x) => (x.chain ? goldCls(x.chain.margin) : "") },
     { key: "ga", label: "Right adds", num: true, sort: (x) => (x.chain ? x.chain.gain : null), cell: (x) => (x.chain ? fmt(x.chain.gain) : ""), cls: "pos" },
-  ], rows, { filters: ["min", "q", "rank", "right"], sort: "gold" });
+  ], rows, { filters: [F_MIN, F_Q, F_RANK, F_RIGHT], sort: "gold" });
 }
 
 function renderDetailSelect(d) {

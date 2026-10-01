@@ -68,11 +68,13 @@
         <header><h2>Local governors</h2><p class="sub" id="govsub"></p></header>
         <ol class="plan" id="govplan"></ol>
         <details class="more"><summary>Every candidate, one governor at a time</summary>
-          <div class="tablewrap"><table class="rank" id="govtable"></table></div></details>
+          <div class="filters" id="govtable-f"></div>
+          <div class="tablewrap scroll"><table class="rank" id="govtable"></table></div></details>
       </article>
       <article class="card">
         <header><h2>Moving the capital</h2><p class="sub" id="capsub"></p></header>
-        <div class="tablewrap"><table class="rank" id="captable"></table></div>
+        <div class="filters" id="captable-f"></div>
+        <div class="tablewrap scroll"><table class="rank" id="captable"></table></div>
       </article>
       <article class="card wide">
         <header><h2>Capital and governors together</h2><p class="sub" id="jointsub"></p></header>
@@ -130,6 +132,7 @@
     &copy; Paradox Interactive. Your saves stay on your computer.</span></footer>
 </div>
 <script src="js/saves.js"></script>
+<script src="js/grid.js"></script>
 <script src="js/placement.js"></script>
 </body>
 </html>
