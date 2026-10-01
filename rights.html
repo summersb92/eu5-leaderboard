@@ -69,9 +69,11 @@
     <div class="cards">
       <article class="card wide">
         <header><h2>Grant these</h2><p class="sub" id="recsub"></p></header>
+        <div class="filters" id="rectable-f"></div>
         <div class="tablewrap"><table class="rank" id="rectable"></table></div>
         <details class="more"><summary>Every town and city, best right first</summary>
-          <div class="tablewrap"><table class="rank" id="alltable"></table></div></details>
+          <div class="filters" id="alltable-f"></div>
+        <div class="tablewrap"><table class="rank" id="alltable"></table></div></details>
       </article>
 
       <article class="card wide" id="detailcard">
@@ -98,6 +100,7 @@
           it's a city. A new town starts without buildings, so this values the RGO boost, and what the right would add to a
           guild just big enough to use all the RGO's output, up to 10 levels, among the guilds you've unlocked that use it as their main input (its margin per level at today's prices shows whether that guild
           pays on its own).</p></header>
+        <div class="filters" id="futtable-f"></div>
         <div class="tablewrap"><table class="rank" id="futtable"></table></div>
       </article>
     </div>
@@ -138,6 +141,11 @@
         <p>Both boost dyes, so the dyes RGO gains the same either way. The difference is the buildings: Printing boosts paper
           and books (a scriptorium, a paper guild), Textile boosts cloth and fine cloth. Whichever set of guilds is bigger in
           the city wins, and the penalty is the same 5% of every building's output in both cases.</p></details>
+      <details><summary>What does &ldquo;wool from Nowe&rdquo; mean?</summary>
+        <p>A building gets a production efficiency bonus when the raw materials it uses are made by an RGO in the same
+          province. Each boosted building names the inputs of the production method it's running that an RGO in the
+          province makes, and where (&ldquo;its own RGO&rdquo; for the location itself). Those guilds are the ones a right
+          pays best on, and they're worth growing; the bonus itself is already in the output the save records.</p></details>
       <details><summary>What about the rights it already has?</summary>
         <p>Rights already granted count against the slots. When a town or city is full the table still shows what the best
           production right would be worth, so you can weigh it against what's there (Lübeck rights' marketplace levels, a

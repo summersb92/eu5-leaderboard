@@ -98,10 +98,16 @@ function analyze({ cid, boroughOnly, rgoPenalty }) {
   const c = S.countries.get(cid);
   if (!c) throw new UserError("That nation isn't in the save.");
   const res = R.analyzeCountry(D, S, cid, { boroughOnly, rgoPenalty });
+  // province RGO sources: location ids -> names (and "own" for the location itself)
+  const srcNames = (src, self) => (src || []).map((s) => ({ good: s.good, own: s.locs.includes(self),
+    locs: s.locs.filter((l) => l !== self).map(locName) }));
   const rows = res.rows.map((r) => ({
     ...r, name: locName(r.loc),
+    blds: r.blds.map((b) => ({ ...b, src: srcNames(b.src, r.loc) })),
+    advice: r.advice.map((a) => (a.local ? { ...a, local: srcNames(a.local, r.loc) } : a)),
     rgoAmount: r2(r.rgoAmount), rgoValue: r2(r.rgoValue), bldValue: r2(r.bldValue), bestNet: r2(r.bestNet),
-    values: r.values.map((v) => ({ ...v, net: r2(v.net), rgo: r2(v.rgo), bld: r2(v.bld), pen: r2(v.pen) })),
+    values: r.values.map((v) => ({ ...v, net: r2(v.net), rgo: r2(v.rgo), bld: r2(v.bld), pen: r2(v.pen),
+      lines: v.lines.map((ln) => (ln.src ? { ...ln, src: srcNames(ln.src, r.loc) } : ln)) })),
   }));
   // every right in the country already, by type
   const granted = {};

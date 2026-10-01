@@ -116,8 +116,14 @@ function slotChip(r) {
 function haveChips(d, r) {
   return r.have.map((h) => `<span class="rights-chip">${esc(d.rname(h))}</span>`).join("");
 }
+/* "wool from Nowe, Gniew" / "wool from its own RGO": a building's inputs an RGO in the province makes */
+function sourceText(d, src) {
+  return (src || []).map((s) => `${esc(d.gname(s.good).toLowerCase())} from ` +
+    [s.own ? "its own RGO" : null, ...s.locs.map(esc)].filter(Boolean).join(", ")).join("; ");
+}
 function breakdown(d, v) {
-  const parts = v.lines.map((l) => `${esc(l.what === "RGO" ? d.gname(l.good) + " RGO" : l.what)} ${fmt(l.value)}`);
+  const parts = v.lines.map((l) => `${esc(l.what === "RGO" ? d.gname(l.good) + " RGO" : l.what)} ${fmt(l.value)}` +
+    (l.src && l.src.length ? ` <span class="src">(${sourceText(d, l.src)})</span>` : ""));
   if (v.pen) parts.push(`−5% buildings ${fmt(v.pen)}`);
   return parts.join(" · ");
 }
@@ -140,34 +146,128 @@ function renderTiles(d) {
     tile("Places to urbanise", String(fut), "rural locations whose RGO, or a guild fed by it, a right would boost &mdash; see Future towns", false);
 }
 
+// ---------------------------------------------------------------- sortable, filterable tables
+/* grid(id, cols, rows, opts): draws table #id from row objects.
+   cols: [{key, label, num, sort: (row) => value, cell: (row) => html, cls}]
+   rows carry the fields the filters read: name, rank, right, gold, free.
+   opts.filters: any of "min", "q", "rank", "right", "free"; their bar goes
+   in #<id>-f. Sort and filter choices last across re-renders and visits. */
+const GRID_KEY = "eu5-rights-grids";
+const gridState = (() => { try { return JSON.parse(localStorage.getItem(GRID_KEY)) || {}; } catch (e) { return {}; } })();
+const saveGrids = () => { try { localStorage.setItem(GRID_KEY, JSON.stringify(gridState)); } catch (e) {} };
+const gridData = {};
+
+function grid(id, cols, rows, opts = {}) {
+  if (!gridState[id]) gridState[id] = { sort: opts.sort || null, desc: true, f: {} };
+  gridData[id] = { cols, rows, opts };
+  if (opts.filters && opts.filters.length) filterBar(id, opts);
+  drawGrid(id);
+}
+
+function filterBar(id, opts) {
+  const box = $(id + "-f"), st = gridState[id].f, d = current;
+  if (!box) return;
+  const has = (k) => opts.filters.includes(k);
+  const rights = [...new Set(gridData[id].rows.map((r) => r.right).filter(Boolean))].sort((a, b) => d.rname(a).localeCompare(d.rname(b)));
+  const ranks = ["rural_settlement", "town", "city", "megalopolis"].filter((k) => gridData[id].rows.some((r) => r.rank === k));
+  box.innerHTML =
+    (has("min") ? `<label class="fl"><span>Min gold/mo</span><input type="number" step="0.5" data-k="min" value="${st.min ?? ""}" placeholder="any"></label>` : "") +
+    (has("q") ? `<label class="fl"><span>Location</span><input type="search" data-k="q" value="${esc(st.q || "")}" placeholder="name…"></label>` : "") +
+    (has("rank") ? `<label class="fl"><span>Rank</span><select data-k="rank"><option value="">all</option>${ranks.map((k) =>
+      `<option value="${k}"${st.rank === k ? " selected" : ""}>${RANKS[k] || k}</option>`).join("")}</select></label>` : "") +
+    (has("right") ? `<label class="fl"><span>Right</span><select data-k="right"><option value="">all</option>${rights.map((k) =>
+      `<option value="${k}"${st.right === k ? " selected" : ""}>${esc(d.rname(k))}</option>`).join("")}</select></label>` : "") +
+    (has("free") ? `<label class="chk fl"><input type="checkbox" data-k="free"${st.free ? " checked" : ""}> Free slot only</label>` : "") +
+    `<button type="button" class="linkbtn" data-reset>Clear filters</button><span class="flcount" id="${id}-n"></span>`;
+  box.oninput = box.onchange = (e) => {
+    const el = e.target, k = el.dataset.k;
+    if (!k) return;
+    st[k] = el.type === "checkbox" ? el.checked : el.type === "number" ? (el.value === "" ? null : +el.value) : el.value;
+    saveGrids();
+    drawGrid(id);
+  };
+  box.querySelector("[data-reset]").onclick = () => { gridState[id].f = {}; saveGrids(); filterBar(id, opts); drawGrid(id); };
+}
+
+function drawGrid(id) {
+  const { cols, rows, opts } = gridData[id], st = gridState[id], f = st.f;
+  const q = (f.q || "").trim().toLowerCase();
+  let list = rows.filter((r) =>
+    (f.min == null || (r.gold ?? 0) >= f.min) && (!q || (r.name || "").toLowerCase().includes(q)) &&
+    (!f.rank || r.rank === f.rank) && (!f.right || r.right === f.right) && (!f.free || r.free));
+  const col = cols.find((c) => c.key === st.sort);
+  if (col && col.sort) {
+    const dir = st.desc ? -1 : 1;
+    list = [...list].sort((a, b) => {
+      const x = col.sort(a), y = col.sort(b);
+      if (x == null || x === "") return y == null || y === "" ? 0 : 1;
+      if (y == null || y === "") return -1;
+      return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y))) * dir;
+    });
+  }
+  const t = $(id);
+  t.innerHTML = "<thead><tr>" + cols.map((c) => {
+    const on = c.key === st.sort, arrow = on ? (st.desc ? " ▼" : " ▲") : "";
+    return `<th class="${c.num ? "n" : ""}${c.sort ? " sortable" : ""}" data-key="${c.key}"` +
+      `${c.sort ? ` aria-sort="${on ? (st.desc ? "descending" : "ascending") : "none"}" title="Sort by ${esc(c.label || "this")}"` : ""}>${c.label}${arrow}</th>`;
+  }).join("") + "</tr></thead><tbody>" +
+    (list.length ? list.map((r) => `<tr class="${r.cls || ""}${r.loc != null ? " click" : ""}"${r.loc != null ? ` data-loc="${r.loc}"` : ""}>` +
+      cols.map((c) => `<td class="${c.num ? "n " : ""}${c.cls ? (typeof c.cls === "function" ? c.cls(r) : c.cls) : ""}">${c.cell(r)}</td>`).join("") + "</tr>").join("")
+      : `<tr><td colspan="${cols.length}" class="dim">${rows.length ? "Nothing matches the filters." : esc(opts.empty || "Nothing here.")}</td></tr>`) + "</tbody>";
+  t.querySelectorAll("th.sortable").forEach((th) => th.addEventListener("click", () => {
+    const k = th.dataset.key, c = cols.find((x) => x.key === k);
+    if (st.sort === k) st.desc = !st.desc;
+    else { st.sort = k; st.desc = !!c.num; }
+    saveGrids();
+    drawGrid(id);
+  }));
+  const n = $(id + "-n");
+  if (n) n.textContent = list.length === rows.length ? `${rows.length} shown` : `${list.length} of ${rows.length} shown`;
+}
+
+const nameCell = (x) => `${esc(x.r.name)}${slotChip(x.r)}`;
+const goldCls = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
+const rankOrder = (k) => ["rural_settlement", "town", "city", "megalopolis"].indexOf(k);
+
 function renderRecs(d) {
   const recs = [];
   for (const r of d.rows) {
     if (!r.slots) continue;
     r.picks.forEach((p, i) => {
       const v = r.values.find((x) => x.right === p.right);
-      recs.push({ r, p, v, free: i < r.free });
+      if (p.net > 0.005) recs.push({ r, p, v, loc: r.loc, name: r.name, rank: r.rank, right: p.right, gold: p.net, free: i < r.free });
     });
   }
-  recs.sort((a, b) => (b.free - a.free) || (b.p.net - a.p.net));
-  const shown = recs.filter((x) => x.p.net > 0.05).slice(0, 20);
-  $("recsub").textContent = shown.length
-    ? `The rights that would add the most output, location by location. Rows marked “full” need an existing right revoked first.`
+  $("recsub").textContent = recs.length
+    ? `The rights that would add the most output, location by location. Rows marked “full” need an existing right revoked first. Click a column to sort.`
     : `No town or city of ${d.name} makes enough of any boosted good for a right to beat its 5% penalty.`;
-  $("rectable").innerHTML = "<thead><tr><th>Location</th><th>Rank</th><th>Grant</th><th>Boosts</th><th class=n>Gold/mo</th><th>Where it comes from</th><th>Has</th></tr></thead><tbody>" +
-    shown.map(({ r, p, v }) => `<tr class="click" data-loc="${r.loc}"><td>${esc(r.name)}${slotChip(r)}</td><td>${RANKS[r.rank]}</td>` +
-      `<td><b>${esc(d.rname(p.right))}</b></td><td><small>${rightGoods(d, d.rights.find((x) => x.key === p.right))}</small></td>` +
-      `<td class="n pos">${fmt(p.net)}</td><td class="wrap"><small>${breakdown(d, v)}</small></td><td>${haveChips(d, r)}</td></tr>`).join("") + "</tbody>";
-  const towns = d.rows.filter((r) => r.slots > 0).sort((a, b) => b.bestNet - a.bestNet);
-  $("alltable").innerHTML = "<thead><tr><th>Location</th><th>Rank</th><th>RGO</th><th class=n>RGO gold</th><th class=n>Bldg gold</th><th>Best right</th><th class=n>Gold/mo</th><th>2nd</th><th>Has</th></tr></thead><tbody>" +
-    towns.map((r) => {
-      const ok = r.values.filter((v) => !v.blocked);
-      const a = ok[0], b = ok[1];
-      return `<tr class="click" data-loc="${r.loc}"><td>${esc(r.name)}${slotChip(r)}</td><td>${RANKS[r.rank]}</td><td>${esc(d.gname(r.raw))}</td>` +
-        `<td class=n>${r.rgoValue.toFixed(1)}</td><td class=n>${r.bldValue.toFixed(1)}</td>` +
-        `<td>${a ? esc(d.rname(a.right)) : "–"}</td><td class="n ${a && a.net > 0 ? "pos" : "neg"}">${a ? fmt(a.net) : ""}</td>` +
-        `<td>${b ? esc(d.rname(b.right)) + ` <small>${fmt(b.net)}</small>` : ""}</td><td>${haveChips(d, r)}</td></tr>`;
-    }).join("") + "</tbody>";
+  grid("rectable", [
+    { key: "loc", label: "Location", sort: (x) => x.name, cell: nameCell },
+    { key: "rank", label: "Rank", sort: (x) => rankOrder(x.rank), cell: (x) => RANKS[x.rank] },
+    { key: "right", label: "Grant", sort: (x) => d.rname(x.right), cell: (x) => `<b>${esc(d.rname(x.right))}</b>` },
+    { key: "boosts", label: "Boosts", cell: (x) => `<small>${rightGoods(d, d.rights.find((y) => y.key === x.right))}</small>` },
+    { key: "gold", label: "Gold/mo", num: true, sort: (x) => x.gold, cell: (x) => fmt(x.gold), cls: (x) => goldCls(x.gold) },
+    { key: "why", label: "Where it comes from", cls: "wrap", cell: (x) => `<small>${breakdown(d, x.v)}</small>` },
+    { key: "has", label: "Has", sort: (x) => x.r.have.length, cell: (x) => haveChips(d, x.r) },
+  ], recs, { filters: ["min", "q", "rank", "right", "free"], sort: "gold", empty: "No grant pays." });
+
+  const towns = d.rows.filter((r) => r.slots > 0).map((r) => {
+    const ok = r.values.filter((v) => !v.blocked);
+    return { r, a: ok[0], b: ok[1], loc: r.loc, name: r.name, rank: r.rank, right: ok[0] ? ok[0].right : null,
+      gold: ok[0] ? ok[0].net : 0, free: r.free > 0 };
+  });
+  grid("alltable", [
+    { key: "loc", label: "Location", sort: (x) => x.name, cell: nameCell },
+    { key: "rank", label: "Rank", sort: (x) => rankOrder(x.rank), cell: (x) => RANKS[x.rank] },
+    { key: "raw", label: "RGO", sort: (x) => d.gname(x.r.raw), cell: (x) => esc(d.gname(x.r.raw)) },
+    { key: "rgo", label: "RGO gold", num: true, sort: (x) => x.r.rgoValue, cell: (x) => x.r.rgoValue.toFixed(1) },
+    { key: "bld", label: "Bldg gold", num: true, sort: (x) => x.r.bldValue, cell: (x) => x.r.bldValue.toFixed(1) },
+    { key: "right", label: "Best right", sort: (x) => (x.a ? d.rname(x.a.right) : ""), cell: (x) => (x.a ? esc(d.rname(x.a.right)) : "–") },
+    { key: "gold", label: "Gold/mo", num: true, sort: (x) => x.gold, cell: (x) => (x.a ? fmt(x.gold) : ""), cls: (x) => goldCls(x.gold) },
+    { key: "second", label: "2nd", num: true, sort: (x) => (x.b ? x.b.net : null),
+      cell: (x) => (x.b ? `${esc(d.rname(x.b.right))} <small>${fmt(x.b.net)}</small>` : "") },
+    { key: "has", label: "Has", sort: (x) => x.r.have.length, cell: (x) => haveChips(d, x.r) },
+  ], towns, { filters: ["min", "q", "rank", "right", "free"], sort: "gold" });
 }
 
 function renderFuture(d) {
@@ -175,18 +275,31 @@ function renderFuture(d) {
     let best = null;
     for (const [k, v] of Object.entries(r.rgoOnly)) if (v > 0 && (!best || v > best.v)) best = { k, v };
     const chain = r.chain.find((c) => c.gain > 0 && c.margin > 0) || null;
-    return { r, best, chain, score: (best ? best.v : 0) + (chain ? chain.gain : 0) };
-  }).filter((x) => x.score > 0);
-  rows.sort((a, b) => b.score - a.score);
+    // the right paying most here: its RGO boost plus, for the same right, the guild
+    const pot = new Map();
+    for (const [k, v] of Object.entries(r.rgoOnly)) if (v > 0) pot.set(k, v);
+    if (chain) pot.set(chain.right, (pot.get(chain.right) || 0) + chain.gain);
+    let right = null, gold = 0;
+    for (const [k, v] of pot) if (v > gold) { right = k; gold = v; }
+    return { r, best, chain, gold, right, loc: r.loc, name: r.name, rank: r.rank, free: false };
+  }).filter((x) => x.gold > 0);
   d.future = rows;
-  $("futtable").innerHTML = "<thead><tr><th>Location</th><th>Rank</th><th>RGO</th><th class=n>Output</th><th class=n>Workers</th>" +
-    "<th>Right for the RGO</th><th class=n>Gold/mo</th><th>Or: guild using all its output</th><th class=n>Levels</th><th class=n>Margin/lvl</th><th class=n>Right adds</th></tr></thead><tbody>" +
-    rows.slice(0, 30).map(({ r, best, chain }) => `<tr class="click" data-loc="${r.loc}"><td>${esc(r.name)}${slotChip(r)}</td><td>${RANKS[r.rank]}</td>` +
-      `<td>${esc(d.gname(r.raw))}</td><td class=n>${r.rgoAmount.toFixed(2)}</td><td class=n>${r.rgoWorkers.toFixed(1)}<small>/${r.rgoMax.toFixed(0)}</small></td>` +
-      `<td>${best ? esc(d.rname(best.k)) : "<span class=dim>–</span>"}</td><td class="n ${best ? "pos" : ""}">${best ? fmt(best.v) : ""}</td>` +
-      (chain ? `<td>${esc(d.buildingNames[chain.building] || chain.building)} → ${esc(d.gname(chain.good))}<br><small>${esc(d.rname(chain.right))}</small></td>` +
-        `<td class=n>${chain.levels.toFixed(1)}${chain.uses < 0.99 ? `<br><small>uses ${Math.round(chain.uses * 100)}%</small>` : ""}</td><td class="n ${chain.margin > 0 ? "pos" : "neg"}">${fmt(chain.margin)}</td><td class="n pos">${fmt(chain.gain)}</td>`
-        : `<td class=dim>–</td><td></td><td></td><td></td>`) + `</tr>`).join("") + "</tbody>";
+  grid("futtable", [
+    { key: "loc", label: "Location", sort: (x) => x.name, cell: nameCell },
+    { key: "rank", label: "Rank", sort: (x) => rankOrder(x.rank), cell: (x) => RANKS[x.rank] },
+    { key: "raw", label: "RGO", sort: (x) => d.gname(x.r.raw), cell: (x) => esc(d.gname(x.r.raw)) },
+    { key: "out", label: "Output", num: true, sort: (x) => x.r.rgoAmount, cell: (x) => x.r.rgoAmount.toFixed(2) },
+    { key: "wk", label: "Workers", num: true, sort: (x) => x.r.rgoWorkers, cell: (x) => `${x.r.rgoWorkers.toFixed(1)}<small>/${x.r.rgoMax.toFixed(0)}</small>` },
+    { key: "gold", label: "Gold/mo", num: true, sort: (x) => x.gold, cell: (x) => fmt(x.gold), cls: "pos" },
+    { key: "right", label: "Best right", sort: (x) => (x.right ? d.rname(x.right) : ""), cell: (x) => (x.right ? esc(d.rname(x.right)) : "–") },
+    { key: "rgob", label: "RGO boost", num: true, sort: (x) => (x.best ? x.best.v : null), cell: (x) => (x.best ? `${fmt(x.best.v)}<br><small>${esc(d.rname(x.best.k))}</small>` : "") },
+    { key: "guild", label: "Guild using all its output", sort: (x) => (x.chain ? d.buildingNames[x.chain.building] : ""),
+      cell: (x) => (x.chain ? `${esc(d.buildingNames[x.chain.building] || x.chain.building)} → ${esc(d.gname(x.chain.good))}<br><small>${esc(d.rname(x.chain.right))}</small>` : "<span class=dim>–</span>") },
+    { key: "lv", label: "Levels", num: true, sort: (x) => (x.chain ? x.chain.levels : null),
+      cell: (x) => (x.chain ? `${x.chain.levels.toFixed(1)}${x.chain.uses < 0.99 ? `<br><small>uses ${Math.round(x.chain.uses * 100)}%</small>` : ""}` : "") },
+    { key: "mg", label: "Margin/lvl", num: true, sort: (x) => (x.chain ? x.chain.margin : null), cell: (x) => (x.chain ? fmt(x.chain.margin) : ""), cls: (x) => (x.chain ? goldCls(x.chain.margin) : "") },
+    { key: "ga", label: "Right adds", num: true, sort: (x) => (x.chain ? x.chain.gain : null), cell: (x) => (x.chain ? fmt(x.chain.gain) : ""), cls: "pos" },
+  ], rows, { filters: ["min", "q", "rank", "right"], sort: "gold" });
 }
 
 function renderDetailSelect(d) {
@@ -206,25 +319,34 @@ function renderDetail() {
   $("detsub").innerHTML = `${RANKS[r.rank]}${r.port ? ", port" : ""} · RGO ${esc(d.gname(r.raw))} ${r.rgoAmount.toFixed(2)}/mo ` +
     `(${r.rgoWorkers.toFixed(1)} of ${r.rgoMax.toFixed(0)} thousand workers) · urban rights ${r.have.length} of ${r.slots}` +
     (r.have.length ? `: ${haveChips(d, r)}` : "") + ` · control ${(r.control * 100).toFixed(0)}%`;
-  $("dettable").innerHTML = "<thead><tr><th>Right</th><th class=n>Gold/mo</th><th class=n>RGO</th><th class=n>Bldgs</th><th class=n>−5%</th><th></th></tr></thead><tbody>" +
-    r.values.map((v) => `<tr class="${r.picks.some((p) => p.right === v.right) ? "pick" : ""} ${v.blocked && v.blocked !== "rural" ? "blocked" : ""}">` +
-      `<td>${esc(d.rname(v.right))}<br><small>${rightGoods(d, d.rights.find((x) => x.key === v.right))}</small></td>` +
-      `<td class="n ${v.net > 0 ? "pos" : "neg"}">${fmt(v.net)}</td><td class=n>${v.rgo ? fmt(v.rgo) : ""}</td>` +
-      `<td class=n>${v.bld ? fmt(v.bld) : ""}</td><td class=n>${v.pen ? fmt(v.pen) : ""}</td>` +
-      `<td><small>${v.blocked === "rural" ? "once it's a town" : v.blocked ? esc(v.blocked) : ""}</small></td></tr>`).join("") + "</tbody>";
+  grid("dettable", [
+    { key: "right", label: "Right", sort: (v) => d.rname(v.right),
+      cell: (v) => `${esc(d.rname(v.right))}<br><small>${rightGoods(d, d.rights.find((x) => x.key === v.right))}</small>` },
+    { key: "gold", label: "Gold/mo", num: true, sort: (v) => v.net, cell: (v) => fmt(v.net), cls: (v) => goldCls(v.net) },
+    { key: "rgo", label: "RGO", num: true, sort: (v) => v.rgo, cell: (v) => (v.rgo ? fmt(v.rgo) : "") },
+    { key: "bld", label: "Bldgs", num: true, sort: (v) => v.bld, cell: (v) => (v.bld ? fmt(v.bld) : "") },
+    { key: "pen", label: "−5%", num: true, sort: (v) => v.pen, cell: (v) => (v.pen ? fmt(v.pen) : "") },
+    { key: "note", label: "", cell: (v) => `<small>${v.blocked === "rural" ? "once it's a town" : v.blocked ? esc(v.blocked) : ""}</small>` },
+  ], r.values.map((v) => ({ ...v, cls: `${r.picks.some((p) => p.right === v.right) ? "pick" : ""} ${v.blocked && v.blocked !== "rural" ? "blocked" : ""}` })),
+  { sort: "gold" });
   const makes = [];
-  if (r.rgoAmount) makes.push({ what: `RGO`, good: r.raw, amount: r.rgoAmount, value: r.rgoValue });
-  for (const b of r.blds) makes.push({ what: `${d.buildingNames[b.type] || b.type} <small>L${b.level}</small>`, good: b.good, amount: b.amount, value: b.value });
-  $("maketable").innerHTML = "<thead><tr><th>Source</th><th>Good</th><th class=n>Amount</th><th class=n>Gold/mo</th></tr></thead><tbody>" +
-    (makes.length ? makes.map((m) => `<tr><td>${m.what}</td><td>${esc(d.gname(m.good))}</td><td class=n>${m.amount.toFixed(2)}</td><td class=n>${m.value.toFixed(2)}</td></tr>`).join("")
-      : `<tr><td colspan=4 class=dim>Nothing yet.</td></tr>`) + "</tbody>";
+  if (r.rgoAmount) makes.push({ what: "RGO", good: r.raw, amount: r.rgoAmount, value: r.rgoValue, src: [] });
+  for (const b of r.blds) makes.push({ what: `${esc(d.buildingNames[b.type] || b.type)} <small>L${b.level}</small>`, name: d.buildingNames[b.type] || b.type,
+    good: b.good, amount: b.amount, value: b.value, src: b.src || [] });
+  grid("maketable", [
+    { key: "what", label: "Source", sort: (m) => m.name || "RGO", cell: (m) => m.what },
+    { key: "good", label: "Good", sort: (m) => d.gname(m.good), cell: (m) => esc(d.gname(m.good)) },
+    { key: "amount", label: "Amount", num: true, sort: (m) => m.amount, cell: (m) => m.amount.toFixed(2) },
+    { key: "gold", label: "Gold/mo", num: true, sort: (m) => m.value, cell: (m) => m.value.toFixed(2) },
+    { key: "src", label: "Inputs from an RGO in the province", cls: "wrap", sort: (m) => m.src.length, cell: (m) => `<small>${sourceText(d, m.src)}</small>` },
+  ], makes, { sort: "gold", empty: "Nothing yet." });
   const bestR = r.best ? d.rname(r.best) : null;
   $("advhead").textContent = bestR ? `Grow these to get more from ${bestR}` : "Grow these";
   $("advtable").innerHTML = "<thead><tr><th>Good</th><th>Building</th><th class=n>Margin/level</th><th class=n>With right</th><th></th></tr></thead><tbody>" +
     (r.advice.length ? r.advice.map((a) => a.rgo
       ? `<tr><td>${esc(d.gname(a.good))}</td><td colspan=4>The RGO makes it: expand the RGO (${r.rgoWorkers.toFixed(1)} of ${r.rgoMax.toFixed(0)} workers now)</td></tr>`
       : `<tr><td>${esc(d.gname(a.good))}</td><td>${esc(a.name)}${a.unlocked ? "" : ' <small>(needs an advance)</small>'}` +
-        `${a.local.length ? `<br><small>uses local ${a.local.map((g) => esc(d.gname(g))).join(", ")}</small>` : ""}</td>` +
+        `${a.local.length ? `<br><small>${sourceText(d, a.local)}</small>` : ""}</td>` +
         `<td class="n ${a.margin > 0 ? "pos" : "neg"}">${fmt(a.margin)}</td><td class="n ${a.marginWith > 0 ? "pos" : "neg"}">${fmt(a.marginWith)}</td>` +
         `<td><small>out ${a.output}/lvl</small></td></tr>`).join("")
       : `<tr><td colspan=5 class=dim>No right pays here yet.</td></tr>`) + "</tbody>";

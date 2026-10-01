@@ -198,7 +198,7 @@
   /* Best way to add output of a right's goods here: for each of its goods,
      the building that makes it with the best margin per level once the right
      applies, using this market's prices. */
-  function buildAdvice(D, markets, rk, L, researched, localRaw) {
+  function buildAdvice(D, markets, rk, L, researched, sourcedFn) {
     const r = D.rights[rk], rank = L.rank === "rural_settlement" ? "town" : L.rank;
     const out = [];
     for (const g of Object.keys(r.output)) {
@@ -216,7 +216,7 @@
           const withRight = gross * (1 + r.output[g] + (r.efficiency || 0)) - cost;
           const cand = { building: bk, name: b.name, pm: pm.name, good: g, output: pm.output, gross, cost,
             margin: gross - cost, marginWith: withRight, unlocked: unlocked && pmOk,
-            local: Object.keys(pm.inputs).filter((ig) => localRaw.has(ig)) };
+            local: sourcedFn(pm.inputs) };
           const better = !best || (cand.unlocked && !best.unlocked) ||
             (cand.unlocked === best.unlocked && cand.marginWith > best.marginWith);
           if (better) best = cand;
@@ -282,17 +282,33 @@
       }
     }
     const rows = [];
-    const provRaw = new Map(); // province -> Set(raw goods) for the input bonus
-    for (const [l, L] of S.locs) if (L.owner === cid && L.raw) (provRaw.get(L.province) || provRaw.set(L.province, new Set()).get(L.province)).add(L.raw);
+    // province -> Map(raw good -> [locations with it as their RGO]): buildings
+    // whose inputs come from an RGO in their own province are more efficient
+    const provRaw = new Map();
+    for (const [l, L] of S.locs) {
+      if (!L.raw || L.province < 0) continue;
+      const m = provRaw.get(L.province) || provRaw.set(L.province, new Map()).get(L.province);
+      (m.get(L.raw) || m.set(L.raw, []).get(L.raw)).push(l);
+    }
+    const pmOf = (type, name) => (D.buildings[type]?.pms || []).find((p) => p.name === name);
+    /* inputs of a production method an RGO in the province makes -> [{good, locs}] */
+    const sourced = (inputs, prov) => {
+      const m = provRaw.get(prov);
+      if (!m || !inputs) return [];
+      return Object.keys(inputs).filter((g) => m.has(g)).map((g) => ({ good: g, locs: m.get(g) }));
+    };
     for (const [l, L] of S.locs) {
       if (L.owner !== cid) continue;
       const prod = S.prod.get(l) || { rgo: null, blds: [] };
+      const srcOf = new Map(); // building type -> its inputs made by an RGO in the province
+      for (const b of prod.blds) srcOf.set(b.type, sourced(pmOf(b.type, b.pm)?.inputs, L.province));
       const have = S.rights.get(l) || [];
       const slots = D.slots[L.rank] ?? 0;
       const vals = [];
       for (const rk of rightKeys) {
         const why = blocked(D, rk, L, l, have, S.isPort(l));
         const v = valueRight(D, S.markets, rk, L, prod, opts.rgoPenalty);
+        for (const ln of v.lines) if (ln.type && srcOf.get(ln.type)?.length) ln.src = srcOf.get(ln.type);
         vals.push({ right: rk, ...v, blocked: why });
       }
       vals.sort((a, b) => b.net - a.net);
@@ -319,13 +335,13 @@
         have, slots, free: Math.max(0, slots - have.length), port: S.isPort(l),
         rgoValue, bldValue,
         blds: prod.blds.filter((b) => b.amount > 0).map((b) => ({ type: b.type, level: b.level, good: b.good, amount: b.amount,
-          value: b.amount * priceAt(D, S.markets, L, b.good) })).sort((a, b) => b.value - a.value),
+          value: b.amount * priceAt(D, S.markets, L, b.good), src: srcOf.get(b.type) || [] })).sort((a, b) => b.value - a.value),
         values: vals.map((v) => ({ right: v.right, net: v.net, rgo: v.rgo, bld: v.bld, pen: v.pen, blocked: v.blocked, lines: v.lines })),
         best: best ? best.right : null, bestNet: best ? best.net : 0,
         picks: pick.map((p) => ({ right: p.right, net: p.net })),
         rgoOnly, feeds: L.raw ? (feedsOf.get(L.raw) || []).map((f) => ({ right: f.right, building: f.building, good: f.good })) : [],
         chain: chainValue(D, S.markets, L, prod, feedsOf.get(L.raw) || []),
-        advice: best ? buildAdvice(D, S.markets, best.right, L, researched, provRaw.get(L.province) || new Set()) : [],
+        advice: best ? buildAdvice(D, S.markets, best.right, L, researched, (inputs) => sourced(inputs, L.province)) : [],
       });
     }
     rows.sort((a, b) => b.bestNet - a.bestNet);

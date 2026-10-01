@@ -184,6 +184,10 @@ the nation has unlocked) and shows its margin per level and what the
 right would add. The map shows the best right, that town potential, or
 one right's value everywhere.
 
+Every list sorts by clicking a column header, and the three main lists
+filter by minimum gold a month, location name, rank, right and (for towns
+and cities) a free slot. Sorts and filters are remembered in the browser.
+
 | File | Role |
 | --- | --- |
 | `rights.html`, `css/rights.css`, `js/rights.js` | Page, tables, map |
