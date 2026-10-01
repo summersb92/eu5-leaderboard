@@ -60,6 +60,7 @@ function openSave(file) {
 }
 
 function onLoaded(data) {
+  const keep = loaded ? +$("nation").value : null; // stay on the same nation when a newer save arrives
   loaded = data;
   mapImage = null;
   const sel = $("nation");
@@ -70,7 +71,8 @@ function onLoaded(data) {
   sel.innerHTML = (players.length ? `<optgroup label="Players">${players.map(opt).join("")}</optgroup>` : "") +
     `<optgroup label="Everyone else">${rest.map(opt).join("")}</optgroup>`;
   const you = data.nations.find((n) => n.tag === data.you) || players[0] || data.nations[0];
-  if (you) sel.value = you.cid;
+  if (keep !== null && data.nations.some((n) => n.cid === keep)) sel.value = keep;
+  else if (you) sel.value = you.cid;
   $("savename").textContent = `${data.save} · ${data.date} · game data ${data.pack.version}`;
   $("result").hidden = false;
   analyze();
@@ -328,7 +330,12 @@ $("saveinput").addEventListener("change", (e) => openSave(e.target.files[0]));
 drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("saveinput").click(); } });
 for (const ev of ["dragenter", "dragover"]) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); });
 for (const ev of ["dragleave", "drop"]) drop.addEventListener(ev, () => drop.classList.remove("over"));
-drop.addEventListener("drop", (e) => { e.preventDefault(); openSave(e.dataTransfer.files[0]); });
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  EU5Saves.fromDrop(e).then((fs) => { if (fs[0]) { openSave(fs[0].file); linked.then((l) => l.note(fs[0].file)); } });
+});
+// The leaderboard's latest save and the remembered ones; loads it when allowed.
+const linked = EU5Saves.mount($("linked"), (file) => openSave(file));
 for (const id of ["nation", "govs", "eligible", "pending"]) $(id).addEventListener("change", analyze);
 for (const b of $("mapmode").querySelectorAll("button")) {
   b.addEventListener("click", () => {

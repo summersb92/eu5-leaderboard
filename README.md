@@ -43,6 +43,18 @@ Output matches the Python script: extracted numbers are identical, and the
 map is within one colour level per pixel. Flags differ only by resampling
 filter.
 
+## Saves shared between pages
+
+`js/saves.js` keeps the remembered saves (file handles in IndexedDB, Chrome
+and Edge) for all three pages. When the leaderboard finishes a build it
+records its newest save as the *leaderboard save* and announces it on a
+`BroadcastChannel`, passing the file itself. The capital finder and urban
+rights advisor show that save and the recent list above their drop zone,
+load it on opening when the browser still allows access to the file
+(otherwise one click), and reload whenever the leaderboard finishes a new
+build in another tab, staying on the nation you had picked. Saves dropped
+on either page join the recent list too.
+
 ## Share links
 
 **Generate link** stores the report (with the sharer's column layout) as a

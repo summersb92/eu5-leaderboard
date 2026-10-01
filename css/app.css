@@ -188,3 +188,14 @@ html.viewer .result{margin-top:0; border-top:0}
 footer{margin-top:48px; padding-block:22px 40px; border-top:1px solid var(--line); color:var(--ink-3); font-size:12.5px}
 @media (max-width:640px){.mast{padding-block:36px 22px} .step{padding:16px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important} .spinner{animation-duration:3s}}
+
+/* the leaderboard's save, offered on the capital finder and rights advisor */
+.linked{margin-top:12px}
+.lbsave{display:flex; align-items:center; justify-content:space-between; gap:10px 16px; flex-wrap:wrap;
+  padding:10px 12px; border:1px solid var(--line); border-radius:6px; background:var(--raised)}
+.lbsave > span{display:flex; flex-direction:column; gap:2px; min-width:0}
+.lbsave b{font-size:13.5px}
+.lbsave .recentmeta{overflow-wrap:anywhere}
+.linked details.recent summary{cursor:pointer; list-style:none}
+.linked details.recent summary::-webkit-details-marker{display:none}
+.linked details.recent summary span::after{content:" ▾"}

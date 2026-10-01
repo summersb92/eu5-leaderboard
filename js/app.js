@@ -200,28 +200,8 @@ function sanitizeData(d) {
 // tools/build-pack.html uses that to build packs.)
 const game = null;
 
-const idb = {
-  open() {
-    return new Promise((res, rej) => {
-      const r = indexedDB.open("eu5-leaderboard", 1);
-      r.onupgradeneeded = () => r.result.createObjectStore("kv");
-      r.onsuccess = () => res(r.result);
-      r.onerror = () => rej(r.error);
-    });
-  },
-  async run(mode, fn) {
-    const db = await this.open();
-    return new Promise((res, rej) => {
-      const tx = db.transaction("kv", mode);
-      const req = fn(tx.objectStore("kv"));
-      tx.oncomplete = () => res(req.result);
-      tx.onerror = () => rej(tx.error);
-    });
-  },
-  get(k) { return this.run("readonly", (s) => s.get(k)).catch(() => undefined); },
-  set(k, v) { return this.run("readwrite", (s) => s.put(v, k)).catch(() => {}); },
-  del(k) { return this.run("readwrite", (s) => s.delete(k)).catch(() => {}); },
-};
+// Shared with the capital finder and rights advisor (js/saves.js).
+const idb = EU5Saves.idb;
 
 /* Drops anywhere on the page are saves (or data files). File handles must
    be requested during the drop event itself; they let the saves be
@@ -268,6 +248,9 @@ const storeRecent = () => idb.set("recentSaves", recent);
 /* Put a just-opened file at the top of the list; returns its entry. */
 async function rememberSave(handle, file) {
   if (!canPickFile || !handle || handle.kind !== "file") return null;
+  // another page may have added to the list since it was loaded
+  const stored = await EU5Saves.recent();
+  recent = stored.length ? stored : recent;
   let entry = null;
   for (const r of recent) {
     if (await r.handle.isSameEntry(handle).catch(() => false)) entry = r;
@@ -654,6 +637,9 @@ async function buildMany(items) {
     const source = kept.length > 1 ? `${kept.length} saves, ${kept[0].date} to ${newest.date}` : (newest.file || {}).name || newest.full.world.save;
     clearInterval(timer);
     await showReport(report, source, notes);
+    // the capital finder and rights advisor follow the newest save built here
+    if (newest.file) EU5Saves.publishBuild({ file: newest.file, handle: newest.entry ? newest.entry.handle : null,
+      date: newest.date, saves: kept.length }).catch(() => {});
     showStatus(kept.length > 1 ? `Built from ${kept.length} saves (${kept[0].date} – ${newest.date})` : `Built from ${source}`, "done");
   } catch (err) {
     clearInterval(timer);
