@@ -163,13 +163,32 @@ counts as finished unless you untick that too.
 | `placement.html`, `css/placement.css`, `js/placement.js` | Page, results, proximity map |
 | `js/placement-worker.js` | Reads the save (via `worker.js`) and runs the searches |
 | `js/proximity.js` | The proximity model; also loads in Node for testing |
+| `tools/build_proximity_graph.js` | Builds `gamedata/<version>/proximity.json` |
 
 Both tables sort by clicking a column header (the # column keeps each
 location's place in the model's ranking) and filter by minimum tax base
 gained, location, rank, and whether a governor can be built there or the
 capital's average proximity; they list every location, not just the top
 few. The table code is shared with the rights advisor in `js/grid.js`.
-| `tools/build_proximity_graph.js` | Builds `gamedata/<version>/proximity.json` |
+
+### Map
+
+The map colours the nation by proximity: as the save records it, as the
+model rebuilds it today, with the suggested governors, with the suggested
+capital and governors, or the proximity those governors add. Hover a
+location for all of those at once.
+
+**One location** shows a single candidate on its own. Pick a location and
+whether it's a new governor (with today's capital and governors) or the
+capital (keeping the governors you have), then show either the proximity
+it would give or the proximity it would gain over today. Moving the
+capital usually costs proximity somewhere, so losses show in blue and gains
+in orange. The line above the map gives the settled tax base it adds and
+the average proximity, the same figures as its row in the tables. Clicking
+a location on the map picks it; clicking a row in the governor table picks
+it as a governor, and in the capital table as the capital. The worker
+works out each candidate's proximity on request from the analysis it
+already holds, so picking one is quick.
 
 ### Placement model
 
