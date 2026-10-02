@@ -92,3 +92,12 @@ table.rank{width:100%; border-collapse:collapse; font-size:13.5px; margin-top:6p
 .mapkey .k{font-size:15px; margin-right:-8px}
 .kcap,.kmove{color:#8A5A12} .kgov{color:#14181F} .knew{color:#9B3B31}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .kgov{color:#E9EBEF}}
+
+/* map: one location on its own */
+.onectl{display:flex; flex-wrap:wrap; gap:8px 14px; margin-left:auto}
+.onectl[hidden]{display:none}
+.onectl .ctl select{min-width:0; font-size:14px; padding:5px 8px}
+#oneloc{max-width:220px}
+.rank tr.click{cursor:pointer}
+#map{cursor:pointer}
+.lossnote i{display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:5px; vertical-align:-1px}

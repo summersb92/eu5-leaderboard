@@ -207,6 +207,24 @@ function analyze({ cid, govs: K, eligibleOnly, pendingBuilt }) {
   };
 }
 
+/* One candidate on its own: the proximity a governor (kind "gov", with the
+   current capital and governors) or the capital (kind "cap", keeping the
+   governors) in `loc` would give, and the settled tax base it adds. */
+function single({ cid, loc, kind, pendingBuilt }) {
+  const c = S.countries.get(cid);
+  const st = cache.get(cid);
+  if (!c || !st) throw new UserError("Analyse the nation first.");
+  const j = st.idx.get(loc);
+  if (j === undefined) throw new UserError("That location isn't the nation's.");
+  const sources = [...st.active, ...(pendingBuilt ? st.pending : [])];
+  const others = combine(st, sources.map((s) => st.srcField(s.loc, s.value)));
+  const base = maxOf(st.capFields[st.idx.get(st.cap)], others);
+  const field = kind === "cap" ? maxOf(st.capFields[j], others) : maxOf(base, st.govFields[j]);
+  const r3 = (v) => Math.round(v * 1000) / 1000;
+  return { cid, loc, kind, name: locName(loc), gain: r3(scoreOf(field, st.weight, st.cpp) - scoreOf(base, st.weight, st.cpp)),
+    avg: r3(avgOf(field)), field: Array.from(field, (v) => Math.round(v * 10) / 10) };
+}
+
 /* Fields are Float32Arrays over the country's locations (index j, not id). */
 function prepare(c) {
   stage(`Mapping ${c.name}…`);
@@ -285,6 +303,10 @@ self.onmessage = async (e) => {
   try {
     if (d.type === "analyze") {
       postMessage({ type: "analysis", data: analyze(d) });
+      return;
+    }
+    if (d.type === "single") {
+      postMessage({ type: "single", req: d.req, data: single(d) });
       return;
     }
     cache.clear();

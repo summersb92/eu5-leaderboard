@@ -90,6 +90,14 @@
           <button type="button" data-mode="plan" role="tab" aria-selected="true">With governors</button>
           <button type="button" data-mode="joint" role="tab">Capital + governors</button>
           <button type="button" data-mode="gain" role="tab">Gain</button>
+          <button type="button" data-mode="one" role="tab">One location</button>
+        </div>
+        <div class="onectl" id="onectl" hidden>
+          <label class="ctl"><span>As</span><select id="onekind">
+            <option value="gov">a new governor</option><option value="cap">the capital</option></select></label>
+          <label class="ctl"><span>Location</span><select id="oneloc"></select></label>
+          <label class="ctl"><span>Show</span><select id="oneshow">
+            <option value="gain">proximity gained</option><option value="prox">proximity</option></select></label>
         </div></header>
       <div class="legend" id="legend"></div>
       <div class="mapbox" id="mapbox">
@@ -97,7 +105,8 @@
         <div class="tip" id="tip" hidden></div>
       </div>
       <p class="mapkey"><span class="k kcap">&#9733;</span> capital <span class="k kgov">&#9679;</span> governor
-        <span class="k knew">&#9670;</span> suggested governor <span class="k kmove">&#9734;</span> suggested capital</p>
+        <span class="k knew">&#9670;</span> suggested governor <span class="k kmove">&#9734;</span> suggested capital
+        &middot; click a location, or a row in the tables, to see it on its own</p>
     </article>
   </section>
 

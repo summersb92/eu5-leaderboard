@@ -12,6 +12,8 @@ const STATUS = {
 
 let worker = null, loaded = null, current = null, reqId = 0, t0 = 0, timer = 0;
 let mapMode = "plan";
+// "One location" map mode: the candidate picked, and its field from the worker
+let one = { kind: "gov", loc: null, data: null, req: 0 };
 
 // ---------------------------------------------------------------- status box
 function logLine(msg) { const l = $("log"); l.textContent += msg + "\n"; }
@@ -44,6 +46,7 @@ function startWorker() {
     else if (m.type === "progress") $("buildbar").value = m.value;
     else if (m.type === "loaded") onLoaded(m.data);
     else if (m.type === "analysis") onAnalysis(m.data);
+    else if (m.type === "single") { if (m.req === one.req) { one.data = m.data; paintMap(); } }
     else if (m.type === "error") fail(m.message);
   };
   worker.onerror = (e) => fail("The page's worker crashed: " + (e.message || "unknown error"));
@@ -96,6 +99,7 @@ function onAnalysis(d) {
   renderTiles(d);
   renderPlans(d);
   renderTables(d);
+  renderOnePicker(d);
   drawMap();
   $("result").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -173,7 +177,7 @@ function renderTables(d) {
     { key: "rank", label: "Rank", sort: (r) => RANK_ORDER.indexOf(r.rank), cell: (r) => esc(r.rank) },
     { key: "status", label: "Can build?", sort: (r) => Object.keys(STATUS).indexOf(r.status), cell: (r) => statusChip(r.status) },
     { key: "gain", label: "+Tax base", num: true, sort: (r) => r.gain, cell: (r) => fmt(r.gain), cls: (r) => (r.gain > 0 ? "pos" : "") },
-  ], govRows, { sort: "gain", click: false, empty: "No location to try.", filters: [
+  ], govRows, { sort: "gain", empty: "No location to try.", filters: [
     { type: "min", key: "gain", label: "Min +tax base", step: 0.1 }, F_Q, F_RANK,
     { type: "select", key: "status", label: "Can build?", options: Object.entries(STATUS).map(([k, v]) => [k, v[1]]) },
   ] });
@@ -189,7 +193,7 @@ function renderTables(d) {
     { key: "rank", label: "Rank", sort: (r) => RANK_ORDER.indexOf(r.rank), cell: (r) => esc(r.rank) },
     { key: "avg", label: "Avg prox.", num: true, sort: (r) => r.avg, cell: (r) => r.avg.toFixed(0) },
     { key: "gain", label: "+Tax base", num: true, sort: (r) => r.gain, cell: (r) => fmt(r.gain), cls: (r) => sgn(r.gain) },
-  ], capRows, { sort: "gain", click: false, filters: [
+  ], capRows, { sort: "gain", filters: [
     { type: "min", key: "gain", label: "Min +tax base", step: 0.1 },
     { type: "min", key: "avg", label: "Min avg prox.", step: 1 }, F_Q, F_RANK,
   ] });
@@ -241,25 +245,69 @@ async function drawMap() {
 function modeValues(d) {
   const m = d.map;
   if (mapMode === "gain") return m.plan.map((v, j) => v - m.base[j]);
+  if (mapMode === "one") {
+    const f = one.data && one.data.cid === d.cid && one.data.loc === one.loc && one.data.kind === one.kind ? one.data.field : m.base;
+    return $("oneshow").value === "gain" ? f.map((v, j) => v - m.base[j]) : f;
+  }
   return m[mapMode];
+}
+const oneGain = () => mapMode === "one" && $("oneshow").value === "gain";
+
+// ---------------------------------------------------------------- one location
+function renderOnePicker(d) {
+  const sel = $("oneloc"), m = d.map;
+  const order = m.locs.map((l, j) => j).sort((a, b) => m.names[a].localeCompare(m.names[b]));
+  sel.innerHTML = order.map((j) => `<option value="${m.locs[j]}">${esc(m.names[j])}${m.ranks[j] ? " · " + esc(m.ranks[j]) : ""}</option>`).join("");
+  if (!m.locs.includes(one.loc)) one.loc = (d.plan.picks[0] || d.govRank[0] || { loc: m.locs[0] }).loc;
+  sel.value = one.loc;
+  $("onekind").value = one.kind;
+  one.data = null;
+  if (mapMode === "one") requestOne();
+}
+
+function requestOne() {
+  if (!current || one.loc == null) return;
+  one.req++;
+  worker.postMessage({ type: "single", req: one.req, cid: current.cid, loc: one.loc, kind: one.kind, pendingBuilt: $("pending").checked });
+}
+
+/* Show `loc` on its own on the map, as a governor or the capital. */
+function pickOne(loc, kind) {
+  if (!current || !current.map.locs.includes(loc)) return;
+  one.loc = loc;
+  if (kind) one.kind = kind;
+  $("oneloc").value = loc;
+  $("onekind").value = one.kind;
+  setMode("one");
+  requestOne();
+}
+
+function setMode(mode) {
+  mapMode = mode;
+  for (const o of $("mapmode").querySelectorAll("button")) o.setAttribute("aria-selected", o.dataset.mode === mode ? "true" : "false");
+  $("onectl").hidden = mode !== "one";
+  if (mode === "one" && !(one.data && one.data.loc === one.loc && one.data.kind === one.kind)) requestOne();
+  paintMap();
 }
 
 function paintMap() {
   const d = current, c = mapCrop;
   if (!d || !c) return;
   const m = d.map, idx = new Map(m.locs.map((l, j) => [l, j]));
-  const vals = modeValues(d), gain = mapMode === "gain";
+  const vals = modeValues(d), gain = mapMode === "gain" || oneGain();
   const maxGain = gain ? Math.max(1, ...vals) : 100;
   const col = gain ? ramp(["--gain-0", "--gain-1", "--gain-2", "--gain-3", "--gain-4", "--gain-5"])
     : ramp(["--seq-0", "--seq-1", "--seq-2", "--seq-3", "--seq-4", "--seq-5", "--seq-6"]);
   const foreign = rgbOf(cssVar("--map-foreign")), sea = rgbOf(cssVar("--map-sea")), zero = rgbOf(cssVar("--map-zero"));
   const kind = loaded.kind;
+  const lossRamp = ramp(["--seq-0", "--seq-2", "--seq-4", "--seq-6"]), loss = (t) => lossRamp(0.15 + 0.85 * t);
   const lut = new Map();
   const colorOf = (l) => {
     if (lut.has(l)) return lut.get(l);
     const j = idx.get(l);
     let rgb;
-    if (j !== undefined) rgb = gain ? (vals[j] > 0.05 ? col(vals[j] / maxGain) : zero) : col(vals[j] / 100);
+    if (j !== undefined) rgb = gain ? (vals[j] > 0.05 ? col(vals[j] / maxGain)
+      : vals[j] < -0.05 ? loss(Math.min(1, -vals[j] / maxGain)) : zero) : col(vals[j] / 100);
     else rgb = kind[l] === 0 || kind[l] === 3 ? foreign : sea;
     lut.set(l, rgb);
     return rgb;
@@ -313,6 +361,12 @@ function drawMarkers(ctx, s) {
     ctx.restore();
   };
   const joint = mapMode === "joint", moved = d.joint.capital.loc !== d.capital.loc;
+  if (mapMode === "one" && one.loc != null) {
+    for (const g of [...d.active, ...($("pending").checked ? d.pending : [])]) shape(g.loc, "dot", ink);
+    if (one.kind === "cap") { shape(d.capital.loc, "ostar", accent); shape(one.loc, "star", alarm); }
+    else { shape(d.capital.loc, "star", accent); shape(one.loc, "diamond", alarm); }
+    return;
+  }
   for (const g of [...d.active, ...($("pending").checked ? d.pending : [])]) shape(g.loc, "dot", ink);
   const sugg = mapMode === "plan" || mapMode === "gain" ? d.plan.picks : joint ? d.joint.govs : [];
   for (const p of sugg) shape(p.loc, "diamond", alarm);
@@ -323,11 +377,19 @@ function drawMarkers(ctx, s) {
 function drawLegend(gain, maxGain, col) {
   const n = 12, cells = Array.from({ length: n }, (_, i) => `<i style="background:rgb(${col(i / (n - 1)).join(",")})"></i>`).join("");
   const ticks = gain ? [0, maxGain / 2, maxGain].map((v) => "+" + v.toFixed(0)) : ["0", "25", "50", "75", "100"];
-  const label = { saved: "Proximity recorded in the save", base: "Proximity, model of today",
+  let label = { saved: "Proximity recorded in the save", base: "Proximity, model of today",
     plan: "Proximity with the suggested governors", joint: "Proximity with the suggested capital and governors",
     gain: "Proximity gained from the suggested governors" }[mapMode];
+  if (mapMode === "one") {
+    const o = one.data && one.data.loc === one.loc && one.data.kind === one.kind ? one.data : null;
+    const what = one.kind === "cap" ? `the capital in ${esc(current.map.names[current.map.locs.indexOf(one.loc)])}`
+      : `a governor in ${esc(current.map.names[current.map.locs.indexOf(one.loc)])}`;
+    label = o ? `${oneGain() ? "Proximity gained with" : "Proximity with"} ${what}: <b>${fmt(o.gain)}</b> settled tax base, ` +
+      `average proximity ${o.avg.toFixed(0)}` : `Working out ${what}…`;
+  }
   $("legend").innerHTML = `<span>${label}</span><span class="scale"><span class="bar">${cells}</span>` +
-    `<span class="ticks">${ticks.map((t) => `<span>${t}</span>`).join("")}</span></span>`;
+    `<span class="ticks">${ticks.map((t) => `<span>${t}</span>`).join("")}</span></span>` +
+    (oneGain() && one.kind === "cap" ? `<span class="lossnote"><i style="background:${cssVar("--seq-4")}"></i>proximity lost</span>` : "");
 }
 
 function onHover(e) {
@@ -340,7 +402,9 @@ function onHover(e) {
   const m = d.map, row = (a, b) => `<div class="row"><span>${a}</span><span>${b}</span></div>`;
   tip.innerHTML = `<b>${esc(m.names[j])}</b>` + row("Rank", esc(m.ranks[j] || "–")) + row("Possible tax", m.ptax[j].toFixed(2)) +
     row("Proximity in save", m.saved[j].toFixed(1)) + row("Model today", m.base[j].toFixed(1)) +
-    row("With governors", m.plan[j].toFixed(1)) + row("Capital + governors", m.joint[j].toFixed(1));
+    row("With governors", m.plan[j].toFixed(1)) + row("Capital + governors", m.joint[j].toFixed(1)) +
+    (mapMode === "one" && one.data && one.data.loc === one.loc && one.data.kind === one.kind
+      ? row(`With ${one.kind === "cap" ? "capital" : "governor"} in ${esc(one.data.name)}`, one.data.field[j].toFixed(1)) : "");
   tip.hidden = false;
   const bx = $("mapbox").getBoundingClientRect();
   let tx = e.clientX - bx.left + 14, ty = e.clientY - bx.top + 14;
@@ -362,13 +426,26 @@ drop.addEventListener("drop", (e) => {
 // The leaderboard's latest save and the remembered ones; loads it when allowed.
 const linked = EU5Saves.mount($("linked"), (file) => openSave(file));
 for (const id of ["nation", "govs", "eligible", "pending"]) $(id).addEventListener("change", analyze);
-for (const b of $("mapmode").querySelectorAll("button")) {
-  b.addEventListener("click", () => {
-    mapMode = b.dataset.mode;
-    for (const o of $("mapmode").querySelectorAll("button")) o.setAttribute("aria-selected", o === b ? "true" : "false");
-    paintMap();
-  });
-}
+for (const b of $("mapmode").querySelectorAll("button")) b.addEventListener("click", () => setMode(b.dataset.mode));
+$("oneloc").addEventListener("change", () => pickOne(+$("oneloc").value));
+$("onekind").addEventListener("change", () => pickOne(one.loc, $("onekind").value));
+$("oneshow").addEventListener("change", paintMap);
+$("pending").addEventListener("change", () => { one.data = null; });
+// a row in the governor or capital table, or a location on the map, shows it on its own
+document.addEventListener("click", (e) => {
+  const tr = e.target.closest("tr.click");
+  if (!tr) return;
+  pickOne(+tr.dataset.loc, tr.closest("#captable") ? "cap" : "gov");
+  $("map").scrollIntoView({ behavior: "smooth", block: "center" });
+});
+$("map").addEventListener("click", (e) => {
+  const d = current, c = mapCrop, cv = $("map");
+  if (!d || !c) return;
+  const rect = cv.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left) / rect.width * c.w), y = Math.floor((e.clientY - rect.top) / rect.height * c.h);
+  const l = c.lid[y * c.w + x];
+  if (d.map.locs.includes(l)) pickOne(l);
+});
 $("map").addEventListener("mousemove", onHover);
 $("map").addEventListener("mouseleave", () => { $("tip").hidden = true; });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintMap);
