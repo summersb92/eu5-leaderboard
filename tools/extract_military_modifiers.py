@@ -150,7 +150,8 @@ if UNITS:
     sys.exit(0)
 
 table = {"advance": {}, "policy": {}, "privilege": {}, "reform": {},
-         "societal": {}, "modifier": {}, "trait": {}}
+         "societal": {}, "modifier": {}, "trait": {},
+         "religion": {}, "school": {}, "aspect": {}}
 
 for name, b in load("in_game/common/advances").items():
     if direct(b):
@@ -185,6 +186,16 @@ for name, b in load("in_game/common/traits/00_ruler.txt").items():
     got = direct(b.get("modifier") or {})
     if got:
         table["trait"][name] = got
+# A country's religion, its religious school and its chosen religious
+# aspects (gods, for folk religions). Not for --estates.
+if not ESTATES:
+    for kind, rel, block in (("religion", "in_game/common/religions", "definition_modifier"),
+                             ("school", "in_game/common/religious_schools", "modifier"),
+                             ("aspect", "in_game/common/religious_aspects", "modifier")):
+        for name, b in load(rel).items():
+            got = direct(b.get(block) or {})
+            if got:
+                table[kind][name] = got
 
 if ESTATES:
     # Location bonuses: per building level, and per location rank.

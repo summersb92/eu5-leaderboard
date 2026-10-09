@@ -97,12 +97,12 @@ Interactive, included for non-commercial fan use.
 
 ## Military estimates
 
-Saves don't record discipline, levy combat ability, military tactics or
-potential levies, so the page estimates them. Discipline, levy combat and
-tactics add up the bonuses from
-what the save does record (advances, laws, privileges, reforms, societal
-values, event modifiers, ruler traits), using a table built from the game
-files; potential levies sum the levy figures the save keeps for each
+Saves don't record discipline, levy combat ability, military tactics,
+unit-type combat bonuses or potential levies, so the page estimates them.
+The modifiers add up the bonuses from what the save does record (advances,
+laws, privileges, reforms, societal values, event modifiers, ruler traits,
+the state religion, religious school and chosen religious aspects), using a
+table built from the game files; potential levies sum the levy figures the save keeps for each
 location's pops. After a game patch, regenerate the table with
 `py tools/extract_military_modifiers.py` and paste it over `MIL_SOURCES` in
 `js/worker.js`.
@@ -139,8 +139,8 @@ men* shows quality. Military tactics is estimated like discipline (base 1
 plus advances, laws, societal values...). Potential levies are what the
 save says each location can supply now: levies take 20 years to recover
 after being called up, so a nation that has just fought a war can show very
-few. Generals, morale, terrain, supply, combined arms, forts and navies are
-left out.
+few. Estate power, favoured gods, generals, morale, terrain, supply, combined
+arms, forts and navies are left out.
 
 The unit table (`UNIT_STATS` in `js/worker.js`) comes from
 `py tools/extract_military_modifiers.py --units`; rerun it after a patch.

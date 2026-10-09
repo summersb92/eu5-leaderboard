@@ -675,7 +675,7 @@ function detailPanel(r){
         +(s[1]?'<b>'+bonus(s[1])+' disc.</b>':'')+(s[2]?'<b>'+bonus(s[2])+' levy</b>':'')
         +(s[3]?'<b>'+(s[3]>0?"+":"")+f2(s[3])+' tactics</b>':'')
         +Object.entries(s[4]||{}).map(([k,v])=>'<b>'+bonus(v)+' '+esc((UNIT_CAT_NAMES[k]||k).toLowerCase())+'</b>').join("")+'</span>').join(""):'<span class="chip">no recorded sources</span>')
-      + '</div><div class="kv" style="margin-top:6px"><span style="font-size:11.5px;line-height:1.4">The game doesn&rsquo;t save these values, so this adds up advances, laws, privileges, reforms, societal values, event modifiers and ruler traits, on top of the base military tactics of 1. It leaves out estate power, cabinet actions, religion, generals and automatic modifiers, and levy units also take &minus;10% discipline. Potential levies are the levy figures the save keeps for each location&rsquo;s pops, added up.</span></div></div>'
+      + '</div><div class="kv" style="margin-top:6px"><span style="font-size:11.5px;line-height:1.4">The game doesn&rsquo;t save these values, so this adds up advances, laws, privileges, reforms, societal values, event modifiers, ruler traits, religion, religious school and religious aspects, on top of the base military tactics of 1. It leaves out estate power, cabinet actions, favoured gods, generals and automatic modifiers, and levy units also take &minus;10% discipline. Potential levies are the levy figures the save keeps for each location&rsquo;s pops, added up.</span></div></div>'
   + grp("State", kv("Great power rank",r.gp_rank>900?"unranked":"#"+r.gp_rank)
       +kv("Great power points",f1(r.gp_points))+kv("World score place",'#'+int(r.score_place))
       +kv("ADM / DIP / MIL",f1(r.score.ADM)+" / "+f1(r.score.DIP)+" / "+f1(r.score.MIL))
@@ -1975,7 +1975,7 @@ const LIVE=(function(){
     +'and tactics 1. <span class="mkey"></span>under arms now, <span class="mkey ml"></span>with every levy raised. '
     +'Unraised levies count as the age&rsquo;s cavalry for nobles and its infantry for everyone else. Advances, laws and the like also raise '
     +'one unit type&rsquo;s combat power (e.g. +10% heavy infantry); those bonuses scale the damage that type deals. Hover any modifier for its sources. '
-    +'Discipline, levy combat, tactics and unit bonuses are estimates (religion, estates and generals aren&rsquo;t counted); morale, terrain, supply '
+    +'Discipline, levy combat, tactics and unit bonuses are estimates (estates, favoured gods and generals aren&rsquo;t counted); morale, terrain, supply '
     +'and combined arms are left out.';
   const C=[
     {k:"_rank",t:"#"},
