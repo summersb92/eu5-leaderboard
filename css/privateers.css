@@ -1,0 +1,42 @@
+/* Privateer finder - on top of app.css, placement.css and rights.css */
+:root{ --map-self:#8A5A12; --map-family:#C49A55; --map-friend:#6E9E97; --map-rival:#D08A3C; --map-enemy:#9B3B31; }
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){ --map-self:#D3A44A; --map-family:#8C6D33; --map-friend:#3E7770; --map-rival:#B5732E; --map-enemy:#C25B4F; }
+}
+:root[data-theme="dark"]{ --map-self:#D3A44A; --map-family:#8C6D33; --map-friend:#3E7770; --map-rival:#B5732E; --map-enemy:#C25B4F; }
+
+.controls + .controls{margin-top:10px}
+.numin{font:500 15px "IBM Plex Mono",monospace; color:var(--ink); background:var(--raised); border:1px solid var(--line);
+  border-radius:4px; padding:6px 8px; width:110px; letter-spacing:0; text-transform:none}
+.weights{align-items:center}
+.weights .wlab{font:600 11px Archivo,sans-serif; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-2); flex-basis:100%}
+.wt input[type=range]{accent-color:var(--accent); width:130px; margin:4px 0 0}
+.wt b{font-family:"IBM Plex Mono",monospace; color:var(--accent); font-weight:600; letter-spacing:0}
+.ctl select#base{min-width:200px}
+
+.rankcard,.detcard{margin-top:16px}
+.rank td .chip{margin-left:4px}
+.chip.out{color:var(--ink-3)} .chip.hired{color:var(--verd)} .chip.no{color:var(--alarm)}
+.rank td .bar{display:inline-block; height:8px; border-radius:2px; background:var(--accent); vertical-align:0; margin-right:6px; opacity:.75}
+.rank tr.sel td{background:var(--accent-wash)}
+.rel{font:600 10.5px/1.6 Archivo,sans-serif; letter-spacing:.06em; text-transform:uppercase}
+.rel.enemy{color:var(--map-enemy)} .rel.rival{color:var(--map-rival)} .rel.friend,.rel.family{color:var(--verd)}
+.rel.neutral{color:var(--ink-3)}
+.short{max-height:420px; overflow-y:auto}
+.rank td input.obs{width:72px; font:500 13px "IBM Plex Mono",monospace; padding:2px 5px; border:1px solid var(--line);
+  border-radius:3px; background:var(--raised); color:var(--ink)}
+.calib{margin-top:16px; border-top:1px solid var(--line-soft); padding-top:10px}
+.calib summary{cursor:pointer; font-weight:600; color:var(--ink-2)}
+.calib summary:hover{color:var(--accent)}
+.calrow{display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px 16px}
+.btn{font:600 13px Archivo,sans-serif; color:var(--raised); background:var(--accent); border:0; border-radius:4px;
+  padding:8px 14px; cursor:pointer}
+.btn.small{padding:3px 9px; font-size:12px}
+.mapkey i{display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:5px; vertical-align:-1px}
+#map{cursor:pointer}
+.stephead h2 small{font:500 14px Archivo,sans-serif; letter-spacing:0}
+.basis{display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; margin:12px 2px 0; font-size:13.5px; color:var(--ink-2)}
+.basis .tag{font:600 10.5px/1.6 Archivo,sans-serif; letter-spacing:.08em; text-transform:uppercase; border-radius:3px; padding:1px 7px;
+  background:var(--accent-wash); color:var(--accent)}
+.basis .tag.save{background:rgba(29,97,89,.12); color:var(--verd)}
+.basis .linkbtn{color:var(--accent); text-decoration:underline; letter-spacing:0}

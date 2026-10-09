@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EU5 Privateer Finder</title>
+<meta name="description" content="Find the sea areas where a Europa Universalis V nation's privateers would plunder the most and hurt its rivals, from a save, entirely in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏴‍☠️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/placement.css">
+<link rel="stylesheet" href="css/rights.css">
+<link rel="stylesheet" href="css/privateers.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <p class="eyebrow"><span>Europa Universalis V</span><span><a href="./">&larr; Leaderboard</a> · <a href="placement.html">Capital finder</a>
+      · <a href="rights.html">Urban rights advisor</a></span></p>
+    <h1>Privateer finder</h1>
+    <p class="lede">Pick a nation and see which <strong>sea areas</strong> its privateers should prey on:
+      where the ports are rich and unguarded, where rivals' shipping is thickest, and where pirate hunters and angry
+      neighbours make it costly. It opens on the early game; drop in your own save to rank from where your campaign
+      stands now. It all runs in this page; <strong>your save is never uploaded</strong>.</p>
+  </header>
+
+  <main>
+    <section class="steps" aria-label="Load a save">
+      <div class="step" id="step-save">
+        <div class="stephead"><h2>Your save <small class="dim">(optional)</small></h2></div>
+        <label class="drop" id="drop" tabindex="0">
+          <input type="file" id="saveinput" accept=".eu5" hidden>
+          <span class="dropmain">Drop a <code>.eu5</code> save here, or <u>choose one</u></span>
+          <span class="dropsub">It has to be written in debug mode, the same as for the
+            <a href="./#readable">leaderboard</a>. Usually in
+            <code class="path">Documents\Paradox Interactive\Europa Universalis V\save games</code></span>
+        </label>
+        <div class="linked" id="linked" hidden></div>
+      </div>
+    </section>
+
+    <section class="status" id="status" hidden aria-live="polite">
+      <div class="statusline">
+        <span class="spinner" id="spinner" aria-hidden="true"></span>
+        <span id="stagetext">Working…</span>
+        <span class="elapsed mono" id="elapsed"></span>
+      </div>
+      <progress class="bar" id="buildbar" max="1" value="0"></progress>
+      <div class="errorbox" id="errorbox" hidden></div>
+      <details class="logbox"><summary>Details</summary><pre id="log"></pre></details>
+    </section>
+  </main>
+
+  <section class="result" id="result" hidden>
+    <div class="controls">
+      <label class="ctl ctlnation"><span>Nation</span><select id="nation"></select></label>
+      <label class="ctl"><span>Naval range</span><input type="number" id="range" min="0" step="50" class="numin"></label>
+      <label class="chk"><input type="checkbox" id="inrange" checked> Only within naval range</label>
+      <label class="chk"><input type="checkbox" id="hireable" checked> Only areas it may hire in</label>
+    </div>
+    <div class="controls weights">
+      <span class="wlab">What matters</span>
+      <label class="ctl wt"><span>Plunder <b id="w-gold-v"></b></span><input type="range" id="w-gold" min="0" max="2" step="0.25" value="1"></label>
+      <label class="ctl wt"><span>Hurting rivals <b id="w-hurt-v"></b></span><input type="range" id="w-hurt" min="0" max="2" step="0.25" value="0.5"></label>
+      <label class="ctl wt"><span>Avoiding hunters <b id="w-risk-v"></b></span><input type="range" id="w-risk" min="0" max="2" step="0.25" value="0.5"></label>
+      <label class="ctl wt"><span>Avoiding anger <b id="w-opinion-v"></b></span><input type="range" id="w-opinion" min="0" max="2" step="0.25" value="0.25"></label>
+      <label class="ctl"><span>Gold from each port</span><select id="base"></select></label>
+      <label class="ctl"><span>× factor</span><input type="number" id="factor" min="0" step="0.001" class="numin"></label>
+    </div>
+    <p class="basis" id="basis"></p>
+
+    <div class="tiles" id="tiles"></div>
+    <p class="fitnote" id="fitnote"></p>
+
+    <article class="card wide rankcard">
+      <header><h2>Sea areas</h2><p class="sub" id="ranksub"></p></header>
+      <div class="filters" id="areatable-f"></div>
+      <div class="tablewrap scroll"><table class="rank" id="areatable"></table></div>
+    </article>
+
+    <article class="card mapcard">
+      <header class="maphead"><h2>Map</h2><p class="sub" id="mapsub">Sea areas coloured by score; click one for the details.</p></header>
+      <div class="legend" id="legend"></div>
+      <div class="mapbox" id="mapbox">
+        <canvas id="map" aria-label="Sea areas by privateering score"></canvas>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <p class="mapkey" id="mapkey"></p>
+    </article>
+
+    <article class="card detcard" id="detail" hidden>
+      <header class="dethead"><h2 id="dettitle"></h2><p class="sub" id="detsub"></p></header>
+      <div class="detgrid">
+        <div>
+          <h3>Who you'd rob</h3>
+          <div class="tablewrap"><table class="rank" id="victims"></table></div>
+          <h3>Shipping in the area</h3>
+          <div class="tablewrap"><table class="rank" id="shipping"></table></div>
+          <p class="hint" id="others"></p>
+        </div>
+        <div>
+          <h3>Ports along the area</h3>
+          <div class="filters" id="ports-f"></div>
+          <div class="tablewrap scroll short"><table class="rank" id="ports"></table></div>
+        </div>
+      </div>
+      <details class="calib" id="calib">
+        <summary>Calibrate the gold from the game</summary>
+        <p class="note">The game works out each port's plunder in its engine, so the page can only estimate it. Once you have a
+          privateer out, hover its income in the game's <em>Privateering</em> tooltip: it lists gold per location. Type a
+          few of those numbers into the ports table above (the <em>Game shows</em> column), with the privateer's power, and
+          the page will work out which per-port figure the game uses and its factor.</p>
+        <div class="calrow">
+          <label class="ctl"><span>Privateer power %</span><input type="number" id="calpower" min="1" max="100" step="1" value="100" class="numin"></label>
+          <button type="button" class="btn" id="calrun">Work it out</button>
+          <span class="dim" id="calnote"></span>
+        </div>
+        <div class="tablewrap"><table class="rank" id="caltable"></table></div>
+      </details>
+    </article>
+  </section>
+
+  <section class="help" id="how">
+    <div class="sechead"><h2>How it works</h2><span class="rule"></span></div>
+    <p class="note">You hire a privateer for a whole <em>sea area</em> &mdash; one per area &mdash; with the Privateers or
+      Letters of Marque advance, the state piracy policy, or a few government reforms. It harasses everyone else's
+      maritime presence there and plunders the ports along it. This page reads your save and, for every sea area,
+      adds up what a privateer there would take, whose shipping it would hit, how hard the area hunts pirates, and
+      how much the port owners would come to hate you.</p>
+    <div class="faq">
+      <details><summary>Where does the gold come from?</summary>
+        <p>From the ports beside the area, one location at a time (the game's tooltip lists them). Ports with a
+          <strong>coastal fort</strong> or <strong>naval battery</strong> can't be raided, nor can your own, your subjects'
+          or your overlord's, nor those of countries you've given an anti-piracy agreement. How much each port gives is
+          worked out in the game's engine; the only number in its files is a factor of 0.01
+          (<code>PRIVATEER_STEAL_MONEY_FACTOR</code>). The page multiplies it by the trade flowing through each port by
+          default; you can switch to the port's tax and calibrate against the game's own tooltip, and the result is
+          remembered.</p></details>
+      <details><summary>What is “hurting rivals”?</summary>
+        <p>The average maritime presence other countries have in the area's sea zones, weighted the way the game's AI
+          weighs it when it picks privateer targets: enemies at war and rivals count in full, neutrals a fifth, allies,
+          subjects and overlords not at all. Privateers wear that presence down, and maritime presence is a big part of
+          merchant power in the markets along the coast.</p></details>
+      <details><summary>What is “pirate hunters”?</summary>
+        <p>The save records how much anti-piracy harassment each area saw last month (ships set to hunt pirates).
+          Each point costs a privateer about 0.5% of its power a month (<code>PRIVATEER_HARASSMENT_IMPACT</code>),
+          privateer durability presumably softens that (the exact rule is in the engine).</p></details>
+      <details><summary>How angry do they get?</summary>
+        <p>Every port owner you rob loses opinion of you in proportion to how much of its monthly income you take: 10% of
+          it (or of 5 gold, if it earns less) costs the full −250, capped at −100, recovering 10 a year. They also get
+          the <em>Disrupting Trade</em> casus belli against you, and anti-piracy countries the <em>Anti-Piracy</em> one.
+          Small coastal states with rich ports get furious fastest.</p></details>
+      <details><summary>How is naval range measured?</summary>
+        <p>As the sailing distance from the sea zones off your own (and your subjects') ports, in map pixels, against
+          your naval range: 1,000 to start, more from naval advances. The game's own measure may differ a little,
+          so the range box is yours to adjust.</p></details>
+    </div>
+  </section>
+  <footer><span>A non-commercial fan tool, not affiliated with Paradox Interactive. Map data from Europa Universalis V
+    &copy; Paradox Interactive. Your saves stay on your computer.</span></footer>
+</div>
+<script src="js/saves.js"></script>
+<script src="js/grid.js"></script>
+<script src="js/privateers.js"></script>
+</body>
+</html>

@@ -268,6 +268,79 @@ methods) and every good's default price. After a game patch:
 node tools/build_rights_data.js "<EU5 install>/game" 1.3.11
 ```
 
+## Privateer finder
+
+`privateers.html` ranks the sea areas a nation could send privateers to. A
+privateer is hired for a whole sea area (one per country per area), needs
+`can_hire_privateers` (the Privateers or Letters of Marque advance, the state
+piracy policy, a few reforms), and the area must be within naval range and
+border a port whose owner you haven't given an anti-piracy agreement. For each
+area it adds up:
+
+- **Plunder**: gold from every port along the area that can be raided: not
+  yours, your subjects' or overlord's, not behind a coastal fort or naval
+  battery (`blocks_privateer_raids`), not an anti-piracy partner's. The game
+  works out each port's take in its engine; the files only give
+  `PRIVATEER_STEAL_MONEY_FACTOR = 0.01`. The page uses 0.01 × the trade
+  flowing through the port (`value_flow`) at full power by default.
+  **Unverified**: the *Calibrate* box under an area takes the per-location
+  gold the game's Privateering tooltip shows, fits the factor for trade, tax
+  and possible tax, and remembers the choice.
+- **Rivals' shipping**: others' average maritime presence in the area's sea
+  zones, weighted like the AI's `HOW_MUCH_WE_CARE_ABOUT_PRIVATEERING_*`
+  defines (enemies at war and rivals 1, neutrals 0.2, allies, subjects and
+  overlords 0).
+- **Pirate hunters**: last month's anti-piracy harassment the save keeps per
+  area (`privateer_manager.pirate_harassment`); each point costs about 0.5%
+  power a month (`PRIVATEER_HARASSMENT_IMPACT`).
+- **Opinion**: each robbed owner's hit from `opinion_placed_privateers`:
+  −250 × (gold taken ÷ 10% of its monthly income, at least 5 gold), floored
+  at −100.
+- **Distance**: sailing distance (Dijkstra over sea-zone centres, full-size
+  map pixels) from the sea zones off your and your subjects' ports, against
+  naval range (base 1,000 from `auto_modifiers`, plus naval advances). The
+  game's own measure may differ, so the range box is editable.
+
+The score is the weighted sum of those, each scaled to the best area. The
+weights, the per-port base and its factor are controls on the page.
+
+The page opens on a **game-start view** with no save needed:
+`gamedata/<version>/privateer-start.json`, a 0.7 MB snapshot of what the
+model reads (owners, port tax and trade, maritime presence, relations,
+privateering advances; player names dropped). Dropping a save replaces it,
+and *Back to the game-start view* returns to it. The current snapshot is from
+the earliest save we have, **1347.4.1**; to rebuild it from a true 1337 start,
+start a game with `-debug_mode`, save at once (or after a few days, so trade
+and presence have ticked), then:
+
+```
+node tools/privateers.js start "<save>.eu5" 1.3.11
+```
+
+The same tool tests the model from the command line, on a save or the
+snapshot (`--all` adds areas out of range):
+
+```
+node tools/privateers.js rank "<save>.eu5" TEU
+node tools/privateers.js rank start TEU
+```
+
+| File | Role |
+| --- | --- |
+| `privateers.html`, `css/privateers.css`, `js/privateers.js` | Page, scoring, tables, map |
+| `js/privateer-worker.js` | Reads the save (via `worker.js`) |
+| `js/privateer-model.js` | The model; also loads in Node for testing |
+| `tools/build_privateer_data.js` | Builds `gamedata/<version>/privateer.json` |
+| `tools/privateers.js` | Command line: rank areas from a save, or build `privateer-start.json` |
+
+`privateer.json` holds every sea area and its zones, the raid-blocking
+buildings, the advances, policies and reforms that touch privateering, and
+the defines above. After a game patch (needs `proximity.json` first):
+
+```
+node tools/build_privateer_data.js "<EU5 install>/game" 1.3.11
+```
+
 ## Institutions
 
 The report shows which institutions each nation has embraced and, for each
