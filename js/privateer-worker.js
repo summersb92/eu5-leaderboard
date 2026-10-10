@@ -49,7 +49,14 @@ async function loadSave(save) {
     const cm = chunk.match(/\n\tcolor=(rgb|hsv360|hsv)\s*\{([^}]*)\}/);
     const rgb = cm ? colorFrom(cm[1], cm[2]) : null;
     const tag = tags.get(cid) || "?";
-    const inc = chunk.match(/\n\tlast_month_gold_income=(-?[\d.]+)/);
+    // last month's income; at game start no month has passed (and the
+    // economy block only holds a part-month), so stand in the tax base
+    let inc = chunk.match(/\n\tlast_month_gold_income=(-?[\d.]+)/);
+    if (!inc || !(parseFloat(inc[1]) > 0)) {
+      const tb = chunk.match(/\n\thistorical_tax_base=\{([^}]*)\}/);
+      const last = tb ? tb[1].trim().split(/\s+/).pop() : null;
+      if (last && parseFloat(last) > 0) inc = [null, last];
+    }
     const adv = chunk.match(/\n\tresearched_advances=\{([^}]*)\}/);
     const laws = chunk.match(/\n\t\timplemented_laws=\{([\s\S]*?)\n\t\t\}/);
     const refs = chunk.match(/\n\t\timplemented_reforms=\{([\s\S]*?)\n\t\t\}/);

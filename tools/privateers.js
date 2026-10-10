@@ -6,9 +6,11 @@
          ranks the sea areas for TAG (default: the save's player), from a
          debug save or from the pack's privateer-start.json; --all also lists
          areas out of naval range or closed by anti-piracy agreements
-     node tools/privateers.js start <save.eu5> [version]
+     node tools/privateers.js start <save.eu5> [version] [--you=TAG]
          writes gamedata/<version>/privateer-start.json from a debug save
-         (player names are dropped)
+         (player names are dropped); --you picks the nation the page opens
+         on, for saves that don't name one (multiplayer hotjoin saves).
+         Multiplayer oos/ folders hold plaintext hotjoin saves from 1337.4.1.
 
    Needs gamedata/<version>/privateer.json and proximity.json (default 1.3.11). */
 "use strict";
@@ -20,7 +22,7 @@ const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith("--")));
 const [cmd, src, arg3] = args;
 if (!["rank", "start"].includes(cmd) || !src) {
   console.error("usage: node tools/privateers.js rank <save.eu5|start> [TAG] [--all]\n" +
-    "       node tools/privateers.js start <save.eu5> [version]");
+    "       node tools/privateers.js start <save.eu5> [version] [--you=TAG]");
   process.exit(1);
 }
 const version = cmd === "start" ? arg3 || "1.3.11" : "1.3.11";
@@ -60,6 +62,8 @@ vm.runInContext("D = __D; PX = __PX; PP = M.prepare(D, PX);", ctx);
   if (cmd === "start") {
     ctx.__nations = loaded.nations.map((n) => ({ ...n, player: null }));
     const snap = vm.runInContext("snapshot(__nations)", ctx);
+    const you = [...flags].find((f) => f.startsWith("--you="));
+    if (you) snap.you = you.slice(6).toUpperCase();
     const out = path.join(pack, "privateer-start.json");
     fs.writeFileSync(out, JSON.stringify(snap));
     console.log(`${path.relative(ROOT, out)}: ${snap.date}, ${snap.nations.length} nations, ` +

@@ -305,17 +305,24 @@ The score is the weighted sum of those, each scaled to the best area. The
 weights, the per-port base and its factor are controls on the page.
 
 The page opens on a **game-start view** with no save needed:
-`gamedata/<version>/privateer-start.json`, a 0.7 MB snapshot of what the
+`gamedata/<version>/privateer-start.json`, a 0.6 MB snapshot of what the
 model reads (owners, port tax and trade, maritime presence, relations,
 privateering advances; player names dropped). Dropping a save replaces it,
-and *Back to the game-start view* returns to it. The current snapshot is from
-the earliest save we have, **1347.4.1**; to rebuild it from a true 1337 start,
-start a game with `-debug_mode`, save at once (or after a few days, so trade
-and presence have ticked), then:
+and *Back to the game-start view* returns to it. The snapshot is the world on
+**1337.4.1**, from a multiplayer hotjoin save: when someone joins a game in
+progress the game writes the whole state as plaintext to
+`Documents/Paradox Interactive/Europa Universalis V/oos/<id>/hotjoinsave_*.txt`
+(desync dumps there, `savegame_oos_*.oos`, are plaintext saves too), so a
+hotjoin on day one is a true start save. No month has passed at 1337.4.1, so
+countries' income is 0; the opinion estimate then stands in each country's
+tax base. To rebuild it:
 
 ```
-node tools/privateers.js start "<save>.eu5" 1.3.11
+node tools/privateers.js start "<oos folder>/hotjoinsave_8.txt" 1.3.11 --you=TEU
 ```
+
+`--you` picks the nation the page opens on (hotjoin saves don't name one).
+Any page that reads saves accepts these header-less plaintext files.
 
 The same tool tests the model from the command line, on a save or the
 snapshot (`--all` adds areas out of range):

@@ -1534,6 +1534,8 @@ async function buildMapData(data, sections, save, msrc) {
 async function checkPlaintext(save) {
   const head = new Uint8Array(await save.slice(0, 32).arrayBuffer());
   const txt = String.fromCharCode(...head);
+  // multiplayer hotjoin saves and out-of-sync dumps are plaintext with no header
+  if (txt.startsWith("metadata={")) return;
   if (!txt.startsWith("SAV")) throw new UserError(`${save.name} does not look like an EU5 save.`);
   if (txt.slice(5, 7) !== "00") {
     throw new UserError(
