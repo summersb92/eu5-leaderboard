@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EU5 Loan &amp; Build Advisor</title>
+<meta name="description" content="Which buildings in your Europa Universalis V save a loan or a government bond would pay for, and where, from what each location really earns and what your treasury taxes of it, entirely in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/placement.css">
+<link rel="stylesheet" href="css/rights.css">
+<link rel="stylesheet" href="css/loans.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <p class="eyebrow"><span>Europa Universalis V</span><span><a href="./">&larr; Leaderboard</a> · <a href="placement.html">Capital finder</a> · <a href="rights.html">Urban rights advisor</a> · <a href="privateers.html">Privateer finder</a></span></p>
+    <h1>Loan &amp; build advisor</h1>
+    <p class="lede">Drop in a save, pick a nation, and see which buildings a <strong>loan</strong> or a <strong>government bond</strong>
+      would pay for, and in which locations &mdash; from what each building really earns in the save and how much of it your
+      treasury taxes. It all runs in this page; <strong>your save is never uploaded</strong>.</p>
+  </header>
+
+  <main>
+    <section class="steps" aria-label="Load a save">
+      <div class="step" id="step-save">
+        <div class="stephead"><h2>Your save</h2></div>
+        <label class="drop" id="drop" tabindex="0">
+          <input type="file" id="saveinput" accept=".eu5" hidden>
+          <span class="dropmain">Drop a <code>.eu5</code> save here, or <u>choose one</u></span>
+          <span class="dropsub">It has to be written in debug mode, the same as for the
+            <a href="./#readable">leaderboard</a>. Usually in
+            <code class="path">Documents\Paradox Interactive\Europa Universalis V\save games</code></span>
+        </label>
+        <div class="linked" id="linked" hidden></div>
+      </div>
+    </section>
+
+    <section class="status" id="status" hidden aria-live="polite">
+      <div class="statusline">
+        <span class="spinner" id="spinner" aria-hidden="true"></span>
+        <span id="stagetext">Working…</span>
+        <span class="elapsed mono" id="elapsed"></span>
+      </div>
+      <progress class="bar" id="buildbar" max="1" value="0"></progress>
+      <div class="errorbox" id="errorbox" hidden></div>
+      <details class="logbox"><summary>Details</summary><pre id="log"></pre></details>
+    </section>
+  </main>
+
+  <section class="result" id="result" hidden>
+    <div class="controls">
+      <label class="ctl ctlnation"><span>Nation</span><select id="nation"></select></label>
+      <div class="ctl"><span>Borrow with</span>
+        <div class="seg" id="mode" role="radiogroup" aria-label="Borrow with">
+          <button type="button" data-mode="loan" role="radio" aria-checked="true">Loan</button>
+          <button type="button" data-mode="bond" role="radio" aria-checked="false">Government bond</button>
+        </div></div>
+      <label class="ctl num"><span>Interest % a year</span><input type="number" id="rate" min="1" max="25" step="0.1"></label>
+      <label class="ctl num" id="termctl"><span>Term, months</span><input type="number" id="term" min="12" max="360" step="12" value="60"></label>
+      <label class="ctl num"><span>Borrow up to, gold</span><input type="number" id="budget" min="0" step="50" value="500"></label>
+      <button type="button" class="linkbtn" id="ratereset">Use the save's rate</button>
+    </div>
+    <p class="savename mono" id="savename"></p>
+
+    <div class="tiles" id="tiles"></div>
+    <p class="fitnote" id="fitnote"></p>
+
+    <div class="cards">
+      <article class="card wide">
+        <header><h2>What to borrow for</h2><p class="sub" id="plansub"></p></header>
+        <div class="plansum" id="plansum"></div>
+        <div class="tablewrap"><table class="rank" id="plantable"></table></div>
+      </article>
+
+      <article class="card wide">
+        <header><h2>Every project, best return first</h2>
+          <p class="sub">One more level of a building already there, a building the location doesn't have yet (valued at what that
+            building makes per level across the same market), or one more RGO worker slot. <b>To treasury</b> is the tax your
+            treasury collects on the new profit: profit &times; the location's control &times; its estates' tax rates.
+            <b>Break-even</b> is what a level has to return each month to pay for itself on these terms. Click a column to sort.</p></header>
+        <div class="filters" id="projtable-f"></div>
+        <div class="tablewrap"><table class="rank" id="projtable"></table></div>
+        <details class="more"><summary>Projects that can't be built now, and why</summary>
+          <div class="filters" id="blocktable-f"></div>
+          <div class="tablewrap"><table class="rank" id="blocktable"></table></div></details>
+      </article>
+
+      <article class="card">
+        <header><h2>What you owe</h2><p class="sub" id="owesub"></p></header>
+        <div class="tablewrap"><table class="rank" id="owetable"></table></div>
+      </article>
+
+      <article class="card">
+        <header><h2>Loan or bond?</h2><p class="sub">The same 100 gold, borrowed at the save's rates.</p></header>
+        <div class="tablewrap"><table class="rank" id="cmptable"></table></div>
+        <p class="note" id="cmpnote"></p>
+      </article>
+    </div>
+
+    <article class="card mapcard">
+      <header class="maphead"><h2>Map</h2>
+        <div class="seg" id="mapmode" role="tablist" aria-label="Map shows">
+          <button type="button" data-mode="cover" role="tab" aria-selected="true">Covers its borrowing</button>
+          <button type="button" data-mode="return" role="tab">Treasury return per gold</button>
+        </div>
+      </header>
+      <div class="legend" id="legend"></div>
+      <div class="mapbox" id="mapbox">
+        <canvas id="map" aria-label="Loan and build map"></canvas>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <p class="mapkey"><span class="k kcap">&#9733;</span> capital &middot; each location shows its best buildable project &middot; click one to filter the table to it</p>
+    </article>
+  </section>
+
+  <section class="help" id="how">
+    <div class="sechead"><h2>How it works</h2><span class="rule"></span></div>
+    <p class="note">In EU5 a loan is <strong>interest only</strong>: each month you pay amount &times; rate &divide; 12, and the whole
+      amount falls due at the end of the term. If you can't pay it then, the loan is extended and you lose 3 points of
+      creditworthiness. A <strong>government bond</strong> never falls due: you pay its interest every month until you redeem it.
+      So a loan only pays for itself if the project returns its interest <em>and</em> enough to put the principal aside by the
+      end of the term; a bond only has to beat its interest.</p>
+    <div class="faq">
+      <details><summary>Why does so little of a building's profit reach the treasury?</summary>
+        <p>A building's profit is wealth in its location, not gold in your treasury. Wealth outside your control goes straight
+          to the estates. The rest is tax base, split between the estates by their share of the location's wealth, and each pays
+          you its tax rate. The page rebuilds your tax income from the save this way to within about a percent (the tiles show
+          both), so a profit of 1 gold a month in a 90%-control city whose estates pay about 30% is worth about 0.27 a month to
+          the treasury. The rest still matters &mdash; estates grow richer and more content &mdash; but it doesn't repay a loan.</p></details>
+      <details><summary>Where do the costs come from?</summary>
+        <p>A building costs its base price &mdash; 50 gold for one unlocked in the Age of Traditions, doubling with each age,
+          more for <code>expensive</code> ones &mdash; times your own cost factor, read from what your constructions in progress
+          actually cost in the save (your nation's if it is building anything, otherwise the world's). An RGO expansion costs
+          100 &times; (0.5 + 0.25 &times; the good's price) times the same kind of factor.</p></details>
+      <details><summary>How is a new building's income estimated?</summary>
+        <p>From the same building elsewhere in the same market: all its profit there divided by all its levels, idle ones
+          counting as zero. If any of them is laying off workers, the market can't use more and the page won't suggest it. It also
+          needs enough unemployed pops of the building's type in the location, and room under its level cap (development,
+          population, rank and market access, as the game's script values have them). The loan plan never adds more levels of a
+          building to a market than it already has there, so prices have a chance to hold.</p></details>
+      <details><summary>What about an RGO?</summary>
+        <p>An RGO expansion adds one worker slot. It's valued at what each RGO worker of that good makes in the market, and the
+          game turns RGO output into somewhat less location wealth than building profit (the page fits both from your save).
+          Unemployed peasants promote into new slots, so they count as available workers.</p></details>
+      <details><summary>What isn't counted?</summary>
+        <p>Building upkeep, price changes as new supply arrives, and everything a building does besides making goods: estate
+          satisfaction, development, prosperity, levies. Interest rates move with creditworthiness; the page starts from the
+          lowest rate you pay now (or the world's going rate) and you can change it.</p></details>
+    </div>
+  </section>
+  <footer><span>A non-commercial fan tool, not affiliated with Paradox Interactive. Game data from Europa Universalis V
+    &copy; Paradox Interactive. Your saves stay on your computer.</span></footer>
+</div>
+<script src="js/saves.js"></script>
+<script src="js/grid.js"></script>
+<script src="js/loans.js"></script>
+</body>
+</html>

@@ -348,6 +348,73 @@ the defines above. After a game patch (needs `proximity.json` first):
 node tools/build_privateer_data.js "<EU5 install>/game" 1.3.11
 ```
 
+## Loan & build advisor
+
+`loans.html` prices every building project of a nation and says which of
+them a loan or a government bond would pay for, and where. It reads what
+the nation owes (`loan_manager`), its treasury, income, creditworthiness
+and estate tax rates, and for each owned location what one more level of
+something would add to the treasury:
+
+- **Expand** a building it has, at the profit per level that building makes
+  now (`last_months_profit`). Not if it is laying off workers, under 90%
+  staffed, at its level cap, or there are no unemployed pops of its type.
+- **Build** one it doesn't have, at that building's profit per level across
+  the same market (all its profit there over all its levels, idle ones
+  counting as zero). Not if any of them in the market is laying off workers.
+- **RGO**: one more worker slot, at what each RGO worker of that good makes
+  in the market. Unemployed laborers and peasants (who promote) fill it.
+
+A building's profit is location wealth, not treasury gold. The part under
+control is tax base, split between the estates by their share of the
+location's wealth (`estate_possible_tax`); each pays its rate
+(`economy.tax_rates`). So the treasury gets profit x control x the
+location's estate-weighted tax rate. Summed over the nation's tax base this
+rebuilds the save's `last_months_tax_income` to within about 1% (19.59
+against 19.71 for Milan in a 1372 save). How much wealth a gold of building
+profit and of RGO output makes is fitted per save over every location
+(`possible_tax` against both; 1.06 and 0.77 in that save).
+
+Costs are the building's base price (`p_building_age_N` by the age of the
+advance that unlocks it, `p_expensive_...` for `expensive = yes`, or its
+own `price`) times the nation's cost factor: what its constructions in
+`construction_manager` actually paid over that base (about 0.72 for Milan:
+36 gold for a 50-gold building), or the world's if it isn't building. RGO
+expansion is 100 x (0.5 + 0.25 x price) x the same kind of factor. Level
+caps evaluate the game's `*_max_level` script values (base, development,
+population, RGO size, city/megalopolis bonus, low market access penalty).
+
+Loans in EU5 are interest only: amount x yearly rate / 12 a month, with the
+principal due at the end of the term (or extended, -0.03 creditworthiness).
+So a level pays for a loan if it returns its interest plus principal / term
+a month; a bond, which never falls due, only has to return its interest.
+The page shows each project's break-even, how much of it the return covers,
+the rate up to which it covers its interest, and its cash payback. The
+**plan** takes the projects that pay for themselves, best return per gold
+first, up to a budget, adding no more levels of a building to a market than
+it already has there and none where that building is laying off workers.
+Rates start at the lowest the nation pays now (else the world's median).
+
+Not counted: building upkeep, price changes as supply grows, and what
+buildings do besides make goods.
+
+| File | Role |
+| --- | --- |
+| `loans.html`, `css/loans.css`, `js/loans.js` | Page, tables, map |
+| `js/loans-worker.js` | Reads the save (via `worker.js` and `rights-model.js`) |
+| `js/loans-model.js` | Save readers, the treasury model and the plan; also loads in Node |
+| `tools/build_loan_data.js` | Builds `gamedata/<version>/loans.json` |
+| `tools/loans.js` | Command line: price a nation's projects from a save |
+
+`loans.json` holds each building's base price and level cap, the cap
+formulas, RGO expansion prices and the loan defines. It needs `rights.json`
+beside it. After a game patch:
+
+```
+node tools/build_loan_data.js "<EU5 install>/game" 1.3.11
+node tools/loans.js "<save>.eu5" MLO --bond --budget=500
+```
+
 ## Institutions
 
 The report shows which institutions each nation has embraced and, for each
