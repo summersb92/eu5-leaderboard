@@ -937,7 +937,8 @@ async function mapLocationNames(fs, mapd) {
           if (v.length && v.every((x) => typeof x === "string")) names.push(...v);
           else for (const item of v) walk(item);
         } else if (isDict(v)) walk(v);
-        else if (typeof v === "string") names.push(v);
+        // a `key = value` line is an attribute of the area or province
+        // (1.4: not_eligible_for_dynamic_country_name = yes), not a location
       }
     } else if (Array.isArray(node)) {
       for (const item of node) walk(item);

@@ -94,8 +94,9 @@ build). `gamedata/index.json` lists the packs. A report uses the pack for
 the version its save records, else the newest, and says which it used.
 
 Current packs: **EU5 1.4.5 "Río Salado"**, Steam build 26211608, 1,955 flags,
-29,124 locations (1.4 redrew the map, so 1.4 saves need this pack; 1.4.0-1.4.4
-beta saves fall back to it as the newest), and **EU5 1.3.11 "Pavia"**, Steam
+28,573 locations (1.4 renamed or reordered about 5,000 of them, so 1.4 saves
+need this pack; 1.4.0-1.4.4 saves fall back to it as the newest), and
+**EU5 1.3.11 "Pavia"**, Steam
 build 24187685, 1,937 flags, for older saves.
 The page doesn't link a game folder any more; the worker still can, and the
 pack builder uses that.
@@ -364,6 +365,10 @@ tax base. To rebuild it:
 ```
 node tools/privateers.js start "<oos folder>/hotjoinsave_8.txt" 1.3.11 --you=TEU
 ```
+
+The 1.4.5 pack has no game-start view yet: 1.4 renamed or reordered about
+5,000 locations, so the 1.3.11 snapshot doesn't fit it. On 1.4 the page asks
+for a save until a 1.4 day-one hotjoin save is turned into one.
 
 `--you` picks the nation the page opens on (hotjoin saves don't name one).
 Any page that reads saves accepts these header-less plaintext files.
