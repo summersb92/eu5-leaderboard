@@ -92,7 +92,7 @@ function onLoaded(data) {
   const players = data.nations.filter((n) => n.player), rest = data.nations.filter((n) => !n.player);
   $("nation").innerHTML = (players.length ? `<optgroup label="Players">${players.map(opt).join("")}</optgroup>` : "") +
     `<optgroup label="Everyone else">${rest.map(opt).join("")}</optgroup>`;
-  const you = data.nations.find((n) => n.tag === data.you) || players[0] || data.nations[0];
+  const you = data.nations.find((n) => n.tag === EU5Saves.nation()) || data.nations.find((n) => n.tag === data.you) || players[0] || data.nations[0];
   const kept = keep && data.nations.find((n) => n.tag === keep);
   if (kept) $("nation").value = kept.cid;
   else if (you) $("nation").value = you.cid;
@@ -451,7 +451,7 @@ function select(k, scroll) {
 
 // ---------------------------------------------------------------- wiring
 const drop = $("drop");
-$("saveinput").addEventListener("change", (e) => openSave(e.target.files[0]));
+$("saveinput").addEventListener("change", (e) => { const f = e.target.files[0]; openSave(f); if (f) linked.then((l) => l.note(f)); });
 drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("saveinput").click(); } });
 for (const ev of ["dragenter", "dragover"]) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); });
 for (const ev of ["dragleave", "drop"]) drop.addEventListener(ev, () => drop.classList.remove("over"));
@@ -462,6 +462,8 @@ drop.addEventListener("drop", (e) => {
 // Open on the game-start view; the leaderboard's latest save, when the browser
 // still allows reading it, replaces it straight away.
 openStart();
+// the nation picked here is the one every page opens on
+$("nation").addEventListener("change", () => { const n = loaded && loaded.nations.find((x) => x.cid === +$("nation").value); if (n) EU5Saves.setNation(n.tag); });
 const linked = EU5Saves.mount($("linked"), (file) => openSave(file, false));
 
 $("base").innerHTML = Object.entries(BASES).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");

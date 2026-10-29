@@ -72,7 +72,7 @@ function onLoaded(data) {
   const players = data.nations.filter((n) => n.player), rest = data.nations.filter((n) => !n.player);
   sel.innerHTML = (players.length ? `<optgroup label="Players">${players.map(opt).join("")}</optgroup>` : "") +
     `<optgroup label="Everyone else">${rest.map(opt).join("")}</optgroup>`;
-  const you = data.nations.find((n) => n.tag === data.you) || players[0] || data.nations[0];
+  const you = data.nations.find((n) => n.tag === EU5Saves.nation()) || data.nations.find((n) => n.tag === data.you) || players[0] || data.nations[0];
   if (keep !== null && data.nations.some((n) => n.cid === keep)) sel.value = keep;
   else if (you) sel.value = you.cid;
   $("savename").textContent = `${data.save} · ${data.date} · game data ${data.pack.version}`;
@@ -390,7 +390,7 @@ function focusLoc(l) {
 
 // ---------------------------------------------------------------- wiring
 const drop = $("drop");
-$("saveinput").addEventListener("change", (e) => openSave(e.target.files[0]));
+$("saveinput").addEventListener("change", (e) => { const f = e.target.files[0]; openSave(f); if (f) linked.then((l) => l.note(f)); });
 drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("saveinput").click(); } });
 for (const ev of ["dragenter", "dragover"]) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); });
 for (const ev of ["dragleave", "drop"]) drop.addEventListener(ev, () => drop.classList.remove("over"));
@@ -398,7 +398,9 @@ drop.addEventListener("drop", (e) => {
   e.preventDefault();
   EU5Saves.fromDrop(e).then((fs) => { if (fs[0]) { openSave(fs[0].file); linked.then((l) => l.note(fs[0].file)); } });
 });
-// The leaderboard's latest save and the remembered ones; loads it when allowed.
+// the nation picked here is the one every page opens on
+$("nation").addEventListener("change", () => { const n = loaded && loaded.nations.find((x) => x.cid === +$("nation").value); if (n) EU5Saves.setNation(n.tag); });
+// The current save (shared by every page) and the remembered ones.
 const linked = EU5Saves.mount($("linked"), (file) => openSave(file));
 $("nation").addEventListener("change", analyze);
 for (const b of $("mode").querySelectorAll("button")) {

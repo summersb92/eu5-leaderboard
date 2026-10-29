@@ -1,10 +1,12 @@
 /* EU5 saves shared by every page: the remembered saves (file handles in
-   IndexedDB, Chrome/Edge only), and the save the leaderboard last built a
-   report from, which the capital finder and urban rights advisor pick up.
+   IndexedDB, Chrome/Edge only), the *current save* every page follows, and
+   the nation picked last.
 
-   When the leaderboard finishes a build it records its newest save here and
-   tells any other open page over a BroadcastChannel, passing the File itself
-   so an open tab can reload without asking for permission again. */
+   Whichever page opens a save (the leaderboard its newest, or a tool page
+   the one dropped or picked there) stores the File itself in IndexedDB as
+   the current save and tells any other open page over a BroadcastChannel.
+   A page opened later loads that File straight away: no permission prompt,
+   in any browser. */
 "use strict";
 const EU5Saves = (() => {
   const idb = {
@@ -64,19 +66,35 @@ const EU5Saves = (() => {
     return handle.getFile();
   }
 
-  /* The leaderboard built a report: remember its newest save and tell the
-     other pages. `saves` is how many saves went into the report. */
-  async function publishBuild({ file, handle, date, saves }) {
-    const rec = { name: file.name, size: file.size, modified: file.lastModified, date: date || null, saves: saves || 1,
-      built: Date.now(), handle: handle || null };
-    await idb.set("lastBuild", rec);
-    if (channel) {
-      try { channel.postMessage({ type: "built", rec, file }); }
-      catch (e) { channel.postMessage({ type: "built", rec: { ...rec, handle: null }, file }); }
-    }
+  /* Which page this is, and what to call it. */
+  const PAGE = (location.pathname.split("/").pop() || "").replace(/\.html$/i, "").replace(/^(index)?$/, "leaderboard");
+  const PAGE_NAMES = { leaderboard: "the leaderboard", placement: "the capital finder", rights: "the rights advisor",
+    privateers: "the privateer finder", loans: "the loan advisor" };
+
+  /* Saves or records ({name, modified|lastModified, size}) of the same file version. */
+  const stamp = (x) => x && [x.name, x.modified != null ? x.modified : x.lastModified, x.size].join("|");
+  const sameSave = (a, b) => !!(a && b && stamp(a) === stamp(b));
+
+  /* Make `file` the save every page follows. `date` and `saves` (how many
+     saves went into the leaderboard's report) are shown beside it. */
+  async function share(file, { date, saves } = {}) {
+    if (!file) return;
+    const prev = await idb.get("currentSave");
+    if (sameSave(prev, file) && !date && !saves) return; // every page has it already
+    const rec = { file, name: file.name, size: file.size, modified: file.lastModified,
+      date: date || (sameSave(prev, file) ? prev.date : null), saves: saves || 1, from: PAGE, at: Date.now() };
+    await idb.set("currentSave", rec);
+    if (channel) channel.postMessage({ type: "current", rec });
   }
-  const lastBuild = () => idb.get("lastBuild");
-  const onBuild = (fn) => { if (channel) channel.addEventListener("message", (e) => e.data && e.data.type === "built" && fn(e.data)); };
+  const current = () => idb.get("currentSave");
+  const onShare = (fn) => { if (channel) channel.addEventListener("message", (e) => e.data && e.data.type === "current" && fn(e.data.rec)); };
+  /* The leaderboard built a report: its newest save becomes the current one. */
+  const publishBuild = ({ file, date, saves }) => share(file, { date, saves });
+
+  /* The nation picked last, by tag, so every page opens on it. */
+  const NATION_KEY = "eu5nation";
+  const nation = () => { try { return localStorage.getItem(NATION_KEY); } catch (e) { return null; } };
+  const setNation = (tag) => { try { if (tag) localStorage.setItem(NATION_KEY, tag); } catch (e) {} };
 
   /* Files from a drop, with handles remembered where the browser gives them
      (they must be asked for during the drop event). -> Promise<[{file, entry}]> */
@@ -105,35 +123,31 @@ const EU5Saves = (() => {
   const fmtSize = (b) => (b >= 1e6 ? Math.round(b / 1e6) + " MB" : Math.max(1, Math.round(b / 1e3)) + " KB");
   const fmtWhen = (t) => new Date(t).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-  /* For the capital finder and rights advisor: a box with the leaderboard's
-     latest save and the recent list, inside `box`. Loads the leaderboard's
-     save straight away when the browser still allows it, and again whenever
-     the leaderboard finishes a new build. open(file, how) does the loading;
-     `how` is "auto", "click" or "leaderboard". */
+  /* For the tool pages: a box with the current save and the recent list,
+     inside `box`. Loads the current save on opening, and again whenever
+     another page makes a different save current (in another tab, or before
+     this one came back into view). open(file, how) does the loading; `how`
+     is "auto", "click" or "shared". Saves opened here become current. */
   async function mount(box, open) {
     let shown = null; // the save currently on the page
     const render = async () => {
-      const [lb, list] = await Promise.all([lastBuild(), recent()]);
+      const [cur, list] = await Promise.all([current(), recent()]);
       box.textContent = "";
-      if (lb) {
+      if (cur && cur.file) {
         const p = document.createElement("div");
         p.className = "lbsave";
         const b = document.createElement("button");
         b.type = "button"; b.className = "btn";
-        const onPage = shown && shown.name === lb.name && shown.modified === lb.modified;
-        b.textContent = onPage ? "Reload" : "Use this save";
-        if (!lb.handle) { b.disabled = true; b.textContent = onPage ? "Loaded" : "Open it here once"; b.title = "This browser didn't keep a handle to the file; drop or pick it here."; }
-        b.addEventListener("click", async () => {
-          const f = lb.handle && await fileOf(lb.handle, true).catch(() => null);
-          if (f) load(f, "click"); else b.textContent = "Not allowed — open it from the leaderboard or drop it here";
-        });
+        b.textContent = sameSave(shown, cur) ? "Reload" : "Use this save";
+        b.addEventListener("click", () => load(cur.file, "click"));
         const t = document.createElement("span");
-        t.innerHTML = `<b>From the leaderboard</b><span class="recentmeta">${esc(lb.name)}${lb.date ? " · " + esc(lb.date) : ""}` +
-          `${lb.saves > 1 ? ` · newest of ${lb.saves}` : ""} · built ${esc(fmtWhen(lb.built))}</span>`;
+        const from = cur.from === PAGE ? "opened here" : "from " + (PAGE_NAMES[cur.from] || cur.from);
+        t.innerHTML = `<b>Current save</b><span class="recentmeta">${esc(cur.name)}${cur.date ? " · " + esc(cur.date) : ""}` +
+          `${cur.saves > 1 ? ` · newest of ${cur.saves}` : ""} · ${esc(from)} · ${esc(fmtWhen(cur.at))}</span>`;
         p.append(t, b);
         box.append(p);
       }
-      const others = list.filter((r) => !lb || r.name !== lb.name || r.modified !== lb.modified);
+      const others = list.filter((r) => !sameSave(r, cur));
       if (others.length) {
         const d = document.createElement("details");
         d.className = "recent";
@@ -158,20 +172,26 @@ const EU5Saves = (() => {
       box.hidden = !box.childElementCount;
     };
     const load = (file, how) => {
-      shown = { name: file.name, modified: file.lastModified };
+      shown = file;
       open(file, how);
-      render();
+      (how === "click" ? share(file) : Promise.resolve()).then(render);
     };
-    onBuild(({ file }) => { if (file) load(file, "leaderboard"); else render(); });
-    await render();
-    const lb = await lastBuild();
-    if (lb && lb.handle) {
-      const f = await fileOf(lb.handle, false).catch(() => null);
-      if (f) load(f, "auto");
-    }
-    return { refresh: render, note: (file) => { shown = { name: file.name, modified: file.lastModified }; render(); } };
+    // load the current save unless it's the one already on the page
+    const follow = async (how) => {
+      const cur = await current();
+      if (cur && cur.file && !sameSave(shown, cur)) load(cur.file, how);
+      else render();
+    };
+    onShare(() => follow("shared"));
+    // switching tabs, or back/forward from the page cache, can miss the message
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") follow("shared"); });
+    window.addEventListener("pageshow", (e) => { if (e.persisted) follow("shared"); });
+    await follow("auto");
+    // note(file): a save dropped or picked on this page, already being opened
+    return { refresh: render, note: (file) => { shown = file; share(file).then(render); } };
   }
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-  return { idb, canPickFile, recent, remember, fileOf, publishBuild, lastBuild, onBuild, fromDrop, pick, mount, fmtSize, fmtWhen };
+  return { idb, canPickFile, recent, remember, fileOf, share, current, onShare, sameSave, publishBuild,
+    nation, setNation, fromDrop, pick, mount, fmtSize, fmtWhen };
 })();

@@ -401,6 +401,7 @@ async function pickSave(add) {
 // others are read without them and kept as compact snapshots for the
 // "Over time" section.
 let timer = null, current = null, lastItems = null;
+let building = false, buildRun = 0;
 
 /* value in 0..1, or null for an indeterminate bar */
 function setBar(bar, value) {
@@ -522,6 +523,8 @@ const toSnap = (data) => ({
    what an earlier report already holds. */
 async function buildMany(items) {
   lastItems = items;
+  const run = ++buildRun;
+  building = true;
   for (const w of activeWorkers) w.terminate();
   activeWorkers.clear();
   $("log").textContent = "";
@@ -639,13 +642,19 @@ async function buildMany(items) {
     const source = kept.length > 1 ? `${kept.length} saves, ${kept[0].date} to ${newest.date}` : (newest.file || {}).name || newest.full.world.save;
     clearInterval(timer);
     await showReport(report, source, notes);
-    // the capital finder and rights advisor follow the newest save built here
-    if (newest.file) EU5Saves.publishBuild({ file: newest.file, handle: newest.entry ? newest.entry.handle : null,
-      date: newest.date, saves: kept.length }).catch(() => {});
+    // coming back to this page shows the report again without rebuilding
+    const f = newest.file;
+    idb.set("lastReport", { report, source, notes, at: Date.now(),
+      file: f ? { name: f.name, modified: f.lastModified, size: f.size } : null });
+    reportAt = Date.now(); reportFile = f;
+    // the other pages follow the newest save built here
+    if (f) EU5Saves.publishBuild({ file: f, date: newest.date, saves: kept.length }).catch(() => {});
     showStatus(kept.length > 1 ? `Built from ${kept.length} saves (${kept[0].date} – ${newest.date})` : `Built from ${source}`, "done");
   } catch (err) {
     clearInterval(timer);
     fail(err.message, err.code);
+  } finally {
+    if (run === buildRun) building = false;
   }
 }
 
@@ -939,7 +948,7 @@ async function loadShared(id, owner) {
 // ==========================================================================
 // Showing and saving the report
 // ==========================================================================
-async function showReport(raw, sourceName, notes, extra) {
+async function showReport(raw, sourceName, notes, extra, scroll = true) {
   const data = sanitizeData(raw);
   const html = buildHtml(await loadTemplate(), data, extra);
   const base = (data.world.save || sourceName).replace(/\.(eu5|json)$/i, "")
@@ -965,7 +974,33 @@ async function showReport(raw, sourceName, notes, extra) {
     doc.addEventListener("toggle", fit, true);
   };
   frame.srcdoc = html;
-  $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (scroll) $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ==========================================================================
+// Following the other pages
+// ==========================================================================
+// The last report built here comes back when the page is opened again, and
+// a save opened on another page since then (js/saves.js) is built in its
+// place, so every page shows the same save.
+let reportAt = 0, reportFile = null; // when the report on screen was built, and from which save
+
+async function restoreReport() {
+  const last = await idb.get("lastReport");
+  if (!last || !last.report || current) return;
+  try {
+    await showReport(last.report, last.source, last.notes || [], undefined, false);
+  } catch (e) { return; } // a report from an older version of the page: build afresh
+  reportAt = last.at || 0; reportFile = last.file || null;
+  showStatus(`Built from ${last.source}`, "done");
+}
+
+async function followShared() {
+  if (building) return;
+  const cur = await EU5Saves.current();
+  if (!cur || !cur.file || cur.at <= reportAt || EU5Saves.sameSave(cur, reportFile)) return;
+  reportAt = cur.at; // once per save, even if the build fails
+  handleFile(cur.file, null);
 }
 
 function download(name, type, content) {
@@ -1043,6 +1078,11 @@ function init() {
     return;
   }
   loadTemplate().catch(() => {});
+  // show the last report, then build any save another page opened since
+  restoreReport().then(followShared);
+  EU5Saves.onShare(followShared);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") followShared(); });
+  window.addEventListener("pageshow", (e) => { if (e.persisted) followShared(); });
   // name the built-in game data versions on the page
   fetch("gamedata/index.json").then((r) => (r.ok ? r.json() : null)).then((ix) => {
     const packs = ((ix && ix.packs) || []).map((p) => p.version).sort((a, b) =>
