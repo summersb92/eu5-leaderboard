@@ -200,6 +200,17 @@ const LEVY_DISCIPLINE = -0.10;
 const BASE_TACTICS = 1;
 // Unraised levies: nobles ride as heavy cavalry, everyone else marches as
 // the current age's light infantry.
+// Levy sizes per pop (main_menu script values levy_generic_infantry_size and
+// levy_generic_noble_cavalry_size), and who raises the generic levies:
+// burghers only from the Age of Discovery, clergy only special ones.
+const LEVY_SIZE = 0.02, LEVY_SIZE_NOBLE = 0.1;
+const LEVY_POP_TYPES = new Set(["peasants", "laborers", "soldiers", "tribesmen"]);
+// Levy pools come to about this share of those sizes (laws, estates and
+// modifiers): the world ratio in a 1442 save (1.4.4). Used for saves that
+// don't record the pools of pops never drawn on.
+const LEVY_POOL_RATIO = 0.79;
+const AGE_ORDER = ["age_1_traditions", "age_2_renaissance", "age_3_discovery", "age_4_reformation",
+  "age_5_absolutism", "age_6_revolutions"];
 const levyProfile = (age, nobles) =>
   UNIT_STATS[`a_${age}_${nobles ? "heavy_cavalry" : "light_infantry"}`] ||
   (nobles ? [4, 1, 0.75, "hc"] : [1, 0.95, 1.05, "li"]);
@@ -1761,6 +1772,10 @@ async function extract(save, sections, topAi = 0) {
   // nearest thing the save has to a country's potential levies.
   const levyPot = new Counter();
   const levyPotNoble = new Counter(); // the nobles' share: they ride as cavalry
+  // Last month's population change by cause (thousands), apart from
+  // conquest: natural (births less starvation and disease) and migration.
+  const popNatural = new Counter(), popMigration = new Counter();
+  const levyUntouched = new Counter(), levyUntouchedNoble = new Counter();
   const locRecs = [];
   if (sections.has("locations")) {
     let ltext = await readSpan(save, ...sections.get("locations")[0]);
@@ -1785,10 +1800,14 @@ async function extract(save, sections, topAi = 0) {
         ctlSum.add(cid, parseFloat(ct[1]));
         if (dv) ctlWsum.add(cid, parseFloat(ct[1]) * parseFloat(dv[1]));
       }
+      const levyTypes = new Set();
       for (const lv of part.matchAll(/\n\t\t\t\t\t(\w+)=\{[^{}]*?\n\t\t\t\t\t\tlevies=([\d.]+)/g)) {
+        levyTypes.add(lv[1]);
         levyPot.add(cid, parseFloat(lv[2]));
         if (lv[1] === "nobles") levyPotNoble.add(cid, parseFloat(lv[2]));
       }
+      for (const ch of part.matchAll(/\n\t{7}(Reproduction|Starvation|Disease|MigrationIn|MigrationOut\w*)=(-?[\d.]+)/g))
+        (ch[1].startsWith("Migration") ? popMigration : popNatural).add(cid, parseFloat(ch[2]));
       // per-location detail for the interactive map
       const lid = part.match(/^(\d+)=\{/);
       if (lid) {
@@ -1804,6 +1823,7 @@ async function extract(save, sections, topAi = 0) {
           prosp: f(/\n\t\t\tprosperity=([\d.]+)/),
           inst: (part.match(/\n\t\t\tinstitutions=\{([^}]*)\}/) || [0, ""])[1],
           pops: pp ? pp[1].trim().split(/\s+/) : [],
+          prov: (part.match(/\n\t\t\tprovince=(\d+)/) || [0, ""])[1], levyTypes,
         });
       }
     }
@@ -1812,16 +1832,81 @@ async function extract(save, sections, topAi = 0) {
   // location populations: the sum of their pops' sizes (thousands)
   if (locRecs.length && sections.has("population")) {
     stage("Counting people…");
-    const size = new Map();
+    const size = new Map(), ptype = new Map();
     const ptext = await readSpan(save, ...sections.get("population")[0]);
-    for (const m of ptext.matchAll(/\n(\d+)=\{\n\ttype=\w+[^}]*?\n\tsize=([\d.]+)/g)) size.set(m[1], parseFloat(m[2]));
+    for (const m of ptext.matchAll(/\n(\d+)=\{\n\ttype=(\w+)[^}]*?\n\tsize=([\d.]+)/g)) {
+      size.set(m[1], parseFloat(m[3]));
+      ptype.set(m[1], m[2]);
+    }
+    // levy base for the 1.4 estimate: the levy sizes pops would raise
+    const afterDiscovery = AGE_ORDER.indexOf(age) >= 2;
     for (const l of locRecs) {
       let s = 0;
-      for (const id of l.pops) s += size.get(id) || 0;
+      l.levyBase = 0; l.levyNoble = 0;
+      for (const id of l.pops) {
+        const n = size.get(id) || 0, t = ptype.get(id);
+        s += n;
+        const r = t === "nobles" ? LEVY_SIZE_NOBLE : LEVY_POP_TYPES.has(t) || (afterDiscovery && t === "burghers") ? LEVY_SIZE : 0;
+        l.levyBase += n * r;
+        if (t === "nobles") l.levyNoble += n * r;
+        // older saves: pops never drawn on have no levy figure; estimate theirs
+        if (r && !l.levyTypes.has(t)) {
+          levyUntouched.add(l.owner, n * r * LEVY_POOL_RATIO);
+          if (t === "nobles") levyUntouchedNoble.add(l.owner, n * r * LEVY_POOL_RATIO);
+        }
+      }
       l.pop = s;
       delete l.pops;
     }
   }
+  // 1.4 keeps levy pools per province, `army_levies={<country>={current max}}`:
+  // current = levies still at home (unraised), max = the full pool. Only
+  // provinces whose levies have been drawn on have one; elsewhere the pool
+  // is estimated from the pops (levyBase) times the country's own ratio of
+  // max to levyBase where it has pools, else the world's.
+  const levyAtHome = new Counter(), levyPool = new Counter(), levyPoolNoble = new Counter();
+  let provLevies = false;
+  if (sections.has("provinces") && locRecs.length) {
+    const ptext = await readSpan(save, ...sections.get("provinces")[0]);
+    const pools = new Map(); // province -> {cid: [current, max]}
+    for (const part of ptext.split(/\n(?=\d+=\{)/)) {
+      const a = part.match(/\n\tarmy_levies=\{([\s\S]*?)\n\t\}/);
+      if (!a) continue;
+      const m = {};
+      for (const e of a[1].matchAll(/(\d+)=\{\s*current=([\d.]+)\s*max=([\d.]+)/g)) m[e[1]] = [parseFloat(e[2]), parseFloat(e[3])];
+      pools.set(part.match(/^(\d+)/)[1], m);
+    }
+    provLevies = pools.size > 0;
+    if (provLevies) {
+      const base = new Map(); // "province:cid" -> [levyBase, levyNoble]
+      for (const l of locRecs) {
+        const k = l.prov + ":" + l.owner, b = base.get(k) || base.set(k, [0, 0]).get(k);
+        b[0] += l.levyBase || 0; b[1] += l.levyNoble || 0;
+      }
+      const fit = new Map(); // cid -> [pool, base] over provinces with a pool
+      let wy = 0, wb = 0;
+      for (const [k, [b]] of base) {
+        const [prov, cid] = k.split(":"), p = pools.get(prov) && pools.get(prov)[cid];
+        if (!p || !(b > 0)) continue;
+        const f = fit.get(cid) || fit.set(cid, [0, 0]).get(cid);
+        f[0] += p[1]; f[1] += b; wy += p[1]; wb += b;
+      }
+      const world = wb > 0 ? wy / wb : 1;
+      for (const [k, [b, bn]] of base) {
+        const [prov, cid] = k.split(":"), p = pools.get(prov) && pools.get(prov)[cid];
+        const nobleShare = b > 0 ? bn / b : 0;
+        if (p) {
+          levyAtHome.add(cid, p[0]); levyPool.add(cid, p[1]); levyPoolNoble.add(cid, p[1] * nobleShare);
+        } else {
+          const f = fit.get(cid), est = b * (f && f[1] > 0 ? f[0] / f[1] : world);
+          levyAtHome.add(cid, est); levyPool.add(cid, est); levyPoolNoble.add(cid, est * nobleShare);
+        }
+      }
+      log(`levies: ${pools.size} provinces with levy pools; elsewhere ${world.toFixed(2)} x the pops' levy sizes (world ratio)`);
+    }
+  }
+  for (const l of locRecs) { delete l.prov; delete l.levyBase; delete l.levyNoble; delete l.levyTypes; }
+  if (!provLevies) for (const [cid, v] of levyUntouched) { levyPot.add(cid, v); levyPotNoble.add(cid, levyUntouchedNoble.val(cid)); }
   // Institution presence: the share of each country's people exposed to it
   // (a location's value is the percentage of its pops exposed).
   const instPop = new Map(), instTot = new Counter();
@@ -1980,6 +2065,11 @@ async function extract(save, sections, topAi = 0) {
   const C = (cid) => countries.get(cid) || new Map();
   const cget = (c, k) => get(c, k);
   const dictOr = (x) => (isDict(x) && x.size ? x : new Map());
+  // Levies raised and unraised: 1.4 saves keep what is still at home per
+  // province; older ones keep potential levies per pop, which include any raised.
+  const levyTotal = (cid) => (provLevies ? levies.val(cid) + levyAtHome.val(cid) : Math.max(levyPot.val(cid), levies.val(cid)));
+  const levyNoblePart = (cid) => (provLevies
+    ? (levyPool.val(cid) > 0 ? levyTotal(cid) * levyPoolNoble.val(cid) / levyPool.val(cid) : 0) : levyPotNoble.val(cid));
   function metric(cid, which) {
     const c = C(cid);
     const cd = dictOr(cget(c, "currency_data"));
@@ -1999,8 +2089,8 @@ async function extract(save, sections, topAi = 0) {
       case "locations": return cget(c, "n_owned") || 0;
       case "produced": return num(cget(c, "total_produced"));
       case "trade": return num(cget(c, "monthly_trade_value"));
-      case "army": return Math.max(levyPot.val(cid), levies.val(cid)) + regulars.val(cid) + mercs.val(cid);
-      case "levies": return levies.val(cid);
+      case "army": return levyTotal(cid) + regulars.val(cid) + mercs.val(cid);
+      case "levies": return levyTotal(cid);
       case "regulars": return regulars.val(cid);
       case "mercs": return mercs.val(cid);
       case "kills": return cget(c, "kills") || 0;
@@ -2051,11 +2141,16 @@ async function extract(save, sections, topAi = 0) {
       id: cid, tag, name: NAMES[tag] || tag, color: get(c, "color") || null,
       player: players.has(cid) ? players.get(cid) : "AI", is_player: players.has(cid),
       pop: metric(cid, "pop"), gold: metric(cid, "gold"),
+      // a year of last month's natural growth and migration (thousands), and
+      // natural growth as a share of the population
+      pop_natural: popNatural.val(cid) * 12, pop_migration: popMigration.val(cid) * 12,
+      pop_natural_rate: metric(cid, "pop") ? popNatural.val(cid) * 12 / metric(cid, "pop") : 0,
       taxbase: metric(cid, "taxbase"), dev: metric(cid, "dev"),
       econbase: metric(cid, "econbase"),
       wealth: metric(cid, "wealth"), control: metric(cid, "control"),
       control_wtd: dev.val(cid) ? ctlWsum.val(cid) / dev.val(cid) : 0.0,
       income: num(get(ec, "income")), expense: num(get(ec, "expense")),
+      _tax_rates: toObj(dictOr(get(ec, "tax_rates")), (v) => num(v)),
       debt: num(get(ec, "total_debt")), loan_capacity: num(get(ec, "loan_capacity")),
       ...debtFigures(debtOf.get(cid), ec),
       creditworthiness: num(get(ec, "creditworthiness")),
@@ -2081,13 +2176,15 @@ async function extract(save, sections, topAi = 0) {
       army_tradition: num(get(cd, "army_tradition")),
       navy_tradition: num(get(cd, "navy_tradition")),
       govpower: num(get(cd, "government_power")), inflation: num(get(cd, "inflation")),
-      // Army is the full strength if every levy were called up: potential
-      // levies (which include any already raised) + regulars + mercenaries.
-      army: Math.max(levyPot.val(cid), levies.val(cid)) + regulars.val(cid) + mercs.val(cid), navy: navy.val(cid),
-      levies: levies.val(cid), regulars: regulars.val(cid),
+      // Army is the full strength if every levy were called up: levies raised
+      // and unraised + regulars + mercenaries.
+      army: levyTotal(cid) + regulars.val(cid) + mercs.val(cid), navy: navy.val(cid),
+      levies: levyTotal(cid), levies_raised: levies.val(cid), levies_unraised: levyTotal(cid) - levies.val(cid),
+      regulars: regulars.val(cid),
       mercs: mercs.val(cid), merc_companies: (companies.get(cid) || new Set()).size,
-      levies_potential: levyPot.val(cid),
-      _combat: combatFigures(combat.get(cid), levyPot.val(cid), levies.val(cid), levyPotNoble.val(cid), age),
+      // the full pool, including levies lost or still recovering
+      levies_potential: provLevies ? levyPool.val(cid) : levyPot.val(cid),
+      _combat: combatFigures(combat.get(cid), levyTotal(cid), levies.val(cid), levyNoblePart(cid), age),
       ...institutionFigures(c, instPop.get(cid), instTot.val(cid), institutions),
       ...estimateMilitary(c, get(dictOr(get(c, "government")), "ruler"), religions),
       army_morale: weight.a.val(cid) ? moraleW.a.val(cid) / weight.a.val(cid) : 0,
@@ -2162,6 +2259,56 @@ self.addEventListener("error", (e) => log(`worker error: ${e.message} (${e.linen
 self.addEventListener("unhandledrejection", (e) =>
   log("worker error: " + ((e.reason && e.reason.stack) || e.reason)));
 
+/* Where each nation's tax income comes from: RGOs or buildings. A
+   location's wealth is fitted over the whole save as building profit and
+   RGO output value, each with its own weight (loans-model.js wealthFit);
+   each location's tax to the treasury (tax x its estates' rates) is split
+   in that proportion, and the parts are scaled to the save's tax income.
+   Locations with neither count as "other". Uses the loan advisor's readers
+   and rights.json from the game-data pack. */
+async function incomeSources(save, sections, rows, pack) {
+  const need = ["locations", "building_manager", "market_manager"];
+  if (need.some((k) => !sections.has(k))) { log("income sources: the save has no building or market data - skipping"); return; }
+  if (!self.EU5Loans) importScripts("rights-model.js", "loans-model.js");
+  const R = self.EU5Rights, M = self.EU5Loans;
+  const D = await packFetch(pack, "rights.json", "json").catch(() => null);
+  if (!D) { log(`income sources: the ${pack.label} has no building data - skipping`); return; }
+  stage("Splitting income between RGOs and buildings…");
+  const locs = M.readLocations(await readSpan(save, ...sections.get("locations")[0]));
+  const buildings = [];
+  for (const [a, b] of sections.get("building_manager")) buildings.push(...M.readBuildings(await readSpan(save, a, b)));
+  const markets = R.readMarkets(await readSpan(save, ...sections.get("market_manager")[0]));
+  const { out: prod } = R.production(D, locs, [], markets);
+  const W = M.wealthFit(D, { locs, buildings, prod, markets });
+  const profit = new Map();
+  for (const b of buildings) if (b.profit !== null) profit.set(b.loc, (profit.get(b.loc) || 0) + b.profit);
+  const want = new Map(rows.map((r) => [+r.id, r]));
+  // tax rates by estate, named as the location readers name them (no "_estate")
+  const rates = new Map(rows.map((r) => [+r.id,
+    Object.fromEntries(Object.entries(r._tax_rates || {}).map(([k, v]) => [k.replace(/_estate$/, ""), v]))]));
+  const parts = new Map(); // cid -> [rgo, buildings, other]
+  for (const [l, L] of locs) {
+    const r = want.get(L.owner);
+    if (!r) continue;
+    const t = L.tax * M.captureAt(L, rates.get(L.owner));
+    const P = prod.get(l), mk = markets.get(L.market);
+    const rv = P && P.rgo && P.rgo.amount ? P.rgo.amount * ((mk && mk.price[P.rgo.good]) || (D.goods[P.rgo.good] || {}).price || 0) : 0;
+    const rw = Math.max(0, W.rgo * rv), bw = Math.max(0, W.building * (profit.get(l) || 0));
+    const p = parts.get(L.owner) || parts.set(L.owner, [0, 0, 0, 0, 0]).get(L.owner);
+    if (rw + bw > 0) { p[0] += t * rw / (rw + bw); p[1] += t * bw / (rw + bw); } else p[2] += t;
+    p[3] += rv; p[4] += profit.get(l) || 0;
+  }
+  for (const r of rows) {
+    const p = parts.get(+r.id);
+    if (!p) continue;
+    const k = p[0] + p[1] + p[2] > 0 ? r.tax_income / (p[0] + p[1] + p[2]) : 0;
+    r.income_rgo = p[0] * k; r.income_buildings = p[1] * k; r.income_other_tax = p[2] * k;
+    r.rgo_output = p[3]; r.building_profit = p[4];
+  }
+  log(`income sources: wealth per gold of building profit ${W.building.toFixed(2)}, of RGO output ${W.rgo.toFixed(2)}` +
+    (W.fitted ? "" : " (not fitted)"));
+}
+
 self.onmessage = async (e) => {
   if (e.data && e.data.type === "fs") return fsReply(e.data);
   const { save, game, opts } = e.data;
@@ -2215,6 +2362,12 @@ self.onmessage = async (e) => {
     } else if (fs) {
       w.game_data = { source: "install", label: fs.label };
     }
+    // only for the report's own save, not the older ones it's compared with
+    if (anyPack && (opts.flags || opts.map)) {
+      try { await incomeSources(save, sections, data.rows, anyPack); }
+      catch (err) { log("income sources: " + err.message + " - skipping"); }
+    }
+    for (const r of data.rows) delete r._tax_rates;
     if (opts.flags && (fs || pack)) {
       stage("Drawing coats of arms…");
       if (fs) await attachFlags(data.rows, fs);

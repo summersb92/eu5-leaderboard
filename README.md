@@ -115,10 +115,42 @@ unit-type combat bonuses or potential levies, so the page estimates them.
 The modifiers add up the bonuses from what the save does record (advances,
 laws, privileges, reforms, societal values, event modifiers, ruler traits,
 the state religion, religious school and chosen religious aspects), using a
-table built from the game files; potential levies sum the levy figures the save keeps for each
-location's pops. After a game patch, regenerate the table with
+table built from the game files. After a game patch, regenerate the table with
 `py tools/extract_military_modifiers.py` and paste it over `MIL_SOURCES` in
 `js/worker.js`.
+
+## Levies
+
+**Levies** counts every levy a nation has, raised and unraised (hover or
+open a nation for the split and the full pool). 1.4 saves keep a levy pool
+per province, `army_levies={<country>={current max}}`: *current* is what is
+still at home, *max* the whole pool when recovered (levies take 20 years
+to come back after being called up, or killed). Only provinces whose levies
+have been drawn on have one. Elsewhere the pool is estimated from the pops:
+2% of peasants, laborers, soldiers and tribesmen (burghers from the Age of
+Discovery) and 10% of nobles (`levy_generic_*_size`), times the ratio of
+real pools to that figure in the nation's own drawn provinces, or the
+world's (0.79 in a 1442 save). The ratio swings a lot between provinces, so
+those parts are rough. Older saves keep a levy figure per pop type and
+location instead, only for pops drawn on; the others get the same estimate.
+
+## Population growth
+
+**Natural growth** is what last month's births less starvation and disease
+(each location's `pop_stats.<type>.changes`: `Reproduction`, `Starvation`,
+`Disease`) would add in a year, as a share of the population. Migration is
+counted apart, and conquest isn't in it at all, unlike the yearly population
+history.
+
+## Tax from RGOs and buildings
+
+Each location's tax to the treasury (its tax times its estates' tax rates)
+is split between its RGO and its buildings in proportion to RGO output
+value and building profit, each weighted by how much location wealth a
+gold of it makes across the whole save (`wealthFit` in `js/loans-model.js`,
+about 0.77 and 1.06). The parts are scaled to the save's tax income. It
+reads the buildings and markets with the loan advisor's readers and needs
+`rights.json` from the game-data pack.
 
 ## Military strength
 
@@ -149,10 +181,9 @@ for the advances, laws, privileges and so on that make it up.
 (nobles' levies as the current age's heavy cavalry, everyone else's as its
 light infantry); *in field* counts only what is under arms now; *per 1k
 men* shows quality. Military tactics is estimated like discipline (base 1
-plus advances, laws, societal values...). Potential levies are what the
-save says each location can supply now: levies take 20 years to recover
-after being called up, so a nation that has just fought a war can show very
-few. Estate power, favoured gods, generals, morale, terrain, supply, combined
+plus advances, laws, societal values...). Unraised levies are those still
+at home (see Levies), so a nation that has just fought a war can show few.
+Estate power, favoured gods, generals, morale, terrain, supply, combined
 arms, forts and navies are left out.
 
 The unit table (`UNIT_STATS` in `js/worker.js`) comes from

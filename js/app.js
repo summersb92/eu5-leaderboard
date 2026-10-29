@@ -14,13 +14,17 @@ const FIELDS = {
   provinces: "Provinces", gold: "Gold", debt: "Debt", income: "Income",
   expense: "Expense", tax_income: "Tax income", trade_balance: "Trade income",
   building_income: "Building income", coin_minting: "Minting",
+  income_rgo: "Tax from RGOs", income_buildings: "Tax from buildings",
+  rgo_output: "RGO output", building_profit: "Building profit",
   trade_value: "Trade value", total_produced: "Goods produced",
   subject_tax_base: "Subject tax base", loan_capacity: "Loan capacity",
   creditworthiness: "Creditworthiness", inflation: "Inflation",
   loans: "Loans", loan_principal: "Borrowed", loan_interest: "Loan interest", loan_cost: "Loan interest / mo",
   bonds: "Bonds", bond_principal: "Bonds raised", bond_interest: "Bond interest", bond_cost: "Bond interest / mo",
   debt_cost: "Debt cost / mo",
-  army: "Army", levies: "Levies", regulars: "Regulars", mercs: "Mercs",
+  pop_natural_rate: "Natural growth", pop_natural: "Natural growth / yr", pop_migration: "Migration / yr",
+  army: "Army", levies: "Levies", levies_raised: "Levies raised", levies_unraised: "Levies at home",
+  regulars: "Regulars", mercs: "Mercs",
   merc_companies: "Merc. companies", army_morale: "Army morale", army_exp: "Army exp.",
   levies_potential: "Potential levies", discipline_est: "Discipline (est.)", levy_combat_est: "Levy combat (est.)",
   tactics_est: "Tactics (est.)", mil_power: "Military power", mil_power_field: "Power in field",
@@ -115,9 +119,14 @@ function sanitizeData(d) {
     for (const k of ["goods", "raw", "ranks", "score"]) o[k] ||= {};
     for (const k of ["pop_hist", "tax_hist", "econ_hist"]) o[k] ||= [];
     if (!o.pop_hist.length) o.pop_hist = [o.pop || 0];
-    // Army = potential levies (which include raised ones) + regulars + mercenaries
+    // data from before levies counted unraised ones: levies was the raised levies
+    if (!("levies_raised" in r) && "levies" in r) {
+      o.levies_raised = numOr0(o.levies);
+      o.levies = Math.max(numOr0(o.levies_potential), o.levies_raised);
+    }
+    // Army = levies raised and unraised + regulars + mercenaries
     if (["levies", "regulars", "mercs"].some((k) => k in o))
-      o.army = Math.max(numOr0(o.levies_potential), numOr0(o.levies)) + numOr0(o.regulars) + numOr0(o.mercs);
+      o.army = numOr0(o.levies) + numOr0(o.regulars) + numOr0(o.mercs);
     for (const k of ["locations", "provinces", "gp_rank", "subunits", "advances", "wars", "rebels", "score_place"])
       o[k] = Math.trunc(numOr0(o[k] ?? (k === "gp_rank" ? 999 : 0)));
     return o;

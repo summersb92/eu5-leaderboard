@@ -469,6 +469,8 @@ const worldArmy=R.reduce((a,r)=>a+N(r.army),0);
 
 const FIELDS=D.fields||{}, CFG=D.config||{};
 const pct=v=>(N(v)*100).toFixed(0)+"%";
+const growth=v=>(N(v)>=0?"+":"−")+Math.abs(N(v)*100).toFixed(2)+"%/yr";
+const signedPeople=v=>{const n=Math.round(N(v)*1000); return !n?"none":(n>0?"+":"−")+Math.abs(n).toLocaleString("en-US");};
 const plus=v=>(N(v)>=0?"+":"")+int(v);
 const bonus=v=>(N(v)>=0?"+":"-")+(Math.abs(N(v))*100).toFixed(1)+"%";
 const rate=v=>(N(v)*100).toFixed(2)+"%";
@@ -490,17 +492,27 @@ const SPEC={
   loan_cost:{fmt:r=>N(r.loan_cost)?f1(r.loan_cost):dash}, bond_cost:{fmt:r=>N(r.bond_cost)?f1(r.bond_cost):dash},
   debt_cost:{fmt:r=>N(r.debt_cost)?f1(r.debt_cost):dash},
   // shown as the sum of the rounded parts, so the columns visibly add up
-  // Army = potential levies (which include any raised) + regulars + mercenaries,
+  // Army = levies (raised and unraised) + regulars + mercenaries,
   // shown as the sum of the rounded parts so the columns visibly add up
-  army:{tip:"Potential levies + regulars + mercenaries: full strength if every levy were raised",
-    fmt:r=>{const lv=Math.max(Math.round(N(r.levies_potential)*1000),Math.round(N(r.levies)*1000));
-      const t=lv+Math.round(N(r.regulars)*1000)+Math.round(N(r.mercs)*1000); return t?t.toLocaleString("en-US"):dash;},
+  army:{tip:"Levies (raised and unraised) + regulars + mercenaries: full strength if every levy were raised",
+    fmt:r=>{const t=Math.round(N(r.levies)*1000)+Math.round(N(r.regulars)*1000)+Math.round(N(r.mercs)*1000);
+      return t?t.toLocaleString("en-US"):dash;},
     // a change in army is just a number of men
     dfmt:r=>men(r.army)},
-  levies:{tip:"Raised levies / potential levies",
-    fmt:r=>(!r.levies&&!r.levies_potential)?dash
-      :men(r.levies)+'<span class="pot"> / '+men(Math.max(N(r.levies_potential),N(r.levies)))+'</span>',
+  levies:{tip:"All levies, raised and unraised (how many are raised now)",
+    fmt:r=>!N(r.levies)?dash
+      :men(r.levies)+(N(r.levies_raised)?'<span class="pot"> ('+men(r.levies_raised)+' raised)</span>':''),
     dfmt:r=>men(r.levies)},
+  levies_raised:{fmt:r=>N(r.levies_raised)?men(r.levies_raised):dash},
+  levies_unraised:{tip:"Levies still at home, not yet raised",fmt:r=>N(r.levies_unraised)?men(r.levies_unraised):dash},
+  pop_natural_rate:{bar:false,tip:"Births less starvation and disease, a year at last month's pace, as a share of the population; conquest and migration left out",
+    fmt:r=>N(r.pop)?growth(r.pop_natural_rate):dash, dfmt:r=>growth(r.pop_natural_rate)},
+  pop_natural:{tip:"People added a year by births less starvation and disease, at last month's pace",
+    fmt:r=>Math.round(N(r.pop_natural)*1000)?signedPeople(r.pop_natural):dash},
+  pop_migration:{bar:false,tip:"People moving in less people moving out, a year at last month's pace",
+    fmt:r=>Math.round(N(r.pop_migration)*1000)?signedPeople(r.pop_migration):dash},
+  income_rgo:{tip:"The part of tax income that comes from RGO output (estimate)",fmt:r=>r.income_rgo==null?dash:f1(r.income_rgo)},
+  income_buildings:{tip:"The part of tax income that comes from building profit (estimate)",fmt:r=>r.income_buildings==null?dash:f1(r.income_buildings)},
   regulars:{fmt:r=>r.regulars?men(r.regulars):dash},
   mercs:{fmt:r=>r.mercs?men(r.mercs):dash},
   navy:{fmt:r=>r.navy?int(r.navy):dash},
@@ -606,7 +618,10 @@ function detailPanel(r){
   const goods=Object.entries(r.goods).sort((a,b)=>N(b[1])-N(a[1]));
   const net=N(r.income)-N(r.expense);
   return '<div class="panel"><div class="grid">'
-  + grp("Realm", kv("Population",pop(r.pop),rk("pop"))+kv("Locations",r.locations,rk("locations"))
+  + grp("Realm", kv("Population",pop(r.pop),rk("pop"))
+      +("pop_natural_rate" in r?kv("Natural growth",growth(r.pop_natural_rate)+" ("+signedPeople(r.pop_natural)+" a year)")
+        +kv("Migration",Math.round(N(r.pop_migration)*1000)?signedPeople(r.pop_migration)+" a year":"none"):"")
+      +kv("Locations",r.locations,rk("locations"))
       +kv("Provinces",r.provinces)+kv("Development",int(r.dev),rk("dev"))
       +kv("Tax base",f1(r.taxbase),rk("taxbase"))+kv("Economic base",f1(r.econbase),rk("econbase"))
       +kv("Wealth, regardless of control",f1(r.wealth),rk("wealth"))
@@ -629,18 +644,26 @@ function detailPanel(r){
         +(N(r.income)?' <span class="rank">'+(N(r.debt_cost)/N(r.income)*100).toFixed(0)+'% of income</span>':''):"none")
       +'<div class="kv"><span style="font-size:11.5px;line-height:1.35">Owed totals include the interest still due on each loan; the monthly cost is the interest on what was borrowed.</span></div>')
   + grp("Income by source", kv("Tax",f1(r.tax_income))
+      +(r.income_rgo!=null?kv("&nbsp;&nbsp;from RGOs",f1(r.income_rgo)+(N(r.tax_income)?' <span class="rank">'+(N(r.income_rgo)/N(r.tax_income)*100).toFixed(0)+'%</span>':''))
+        +kv("&nbsp;&nbsp;from buildings",f1(r.income_buildings)+(N(r.tax_income)?' <span class="rank">'+(N(r.income_buildings)/N(r.tax_income)*100).toFixed(0)+'%</span>':''))
+        +(N(r.income_other_tax)>=0.05?kv("&nbsp;&nbsp;from neither",f1(r.income_other_tax)):""):"")
       +kv("Trade, net",(N(r.trade_balance)>=0?"+":"")+f1(r.trade_balance))
       +kv("Foreign buildings",f1(r.building_income))
       +kv("Coin minting",f2(r.coin_minting))
       +kv("Production &amp; other",f1(N(r.income)-N(r.tax_income)-N(r.trade_balance)-N(r.building_income)-N(r.coin_minting)))
       +kv("<b style=\'font-weight:600\'>Total</b>",f1(r.income))
-      +'<div class="kv"><span style="font-size:11.5px;line-height:1.35">Diplomatic income is not recorded in EU5 saves.</span></div>')
+      +'<div class="kv"><span style="font-size:11.5px;line-height:1.35">Diplomatic income is not recorded in EU5 saves.'
+        +(r.income_rgo!=null?' The RGO / building split is an estimate: each location\'s tax is shared out in proportion to its RGO output ('
+          +f1(r.rgo_output)+' gold a month in all) and building profit ('+f1(r.building_profit)+'), each weighted by how much location wealth it makes across the save.':'')
+        +'</span></div>')
   + grp("Commerce", kv("Subject tax base",f1(r.subject_tax_base))
       +kv("Trade value",f1(r.trade_value))
       +kv("Goods produced",f1(r.total_produced),rk("produced")))
   + grp("Army", kv("Army (potential levies + regulars + mercenaries)",r.army?SPEC.army.fmt(r)+" men":"none")
-      +kv("Levies raised",r.levies?men(r.levies)+" men":"none")
-      +kv("Potential levies (est.)",r.levies_potential?men(r.levies_potential)+" men":"none")
+      +kv("Levies, raised and unraised",N(r.levies)?men(r.levies)+" men":"none")
+      +kv("&nbsp;&nbsp;raised now",N(r.levies_raised)?men(r.levies_raised)+" men":"none")
+      +("levies_unraised" in r?kv("&nbsp;&nbsp;at home, not raised",N(r.levies_unraised)?men(r.levies_unraised)+" men":"none"):"")
+      +kv("Levy pool, when fully recovered",N(r.levies_potential)?men(r.levies_potential)+" men":"none")
       +kv("Regulars",r.regulars?men(r.regulars)+" men":"none")
       +kv("Mercenaries",r.mercs?men(r.mercs)+" men":"none")
       +kv("Mercenary companies hired",N(r.merc_companies)||"none")
@@ -1443,7 +1466,7 @@ const XL=(function(){
 
 /* How each field goes into a spreadsheet: real units, not the page's
    rounded text (population and troops in people, not thousands). */
-const MEN=new Set(["army","levies","regulars","mercs","manpower","max_manpower","sailors","max_sailors","levies_potential"]);
+const MEN=new Set(["army","levies","levies_raised","levies_unraised","regulars","mercs","manpower","max_manpower","sailors","max_sailors","levies_potential"]);
 const WHOLE=new Set(["n_institutions","research_paid","loans","bonds","locations","provinces","subunits","advances","advances_gained","wars","rebels","merc_companies",
   "navy","navy_levies","navy_regulars","navy_mercs","score_place","kills","war_battle","war_attrition","gold","dev","debt"]);
 function xlCol(k){
@@ -1451,6 +1474,8 @@ function xlCol(k){
   if(k==="gp_rank") return {h:t,w:6,style:"int",v:r=>N(r.gp_rank)>900?null:N(r.gp_rank)};
   if(k==="pop") return {h:"Population",w:13,style:"int",v:r=>Math.round(N(r.pop)*1000)};
   if(MEN.has(k)) return {h:t+" (men)",w:14,style:"int",v:r=>Math.round(N(r[k])*1000)};
+  if(k==="pop_natural"||k==="pop_migration") return {h:t+" (people)",w:14,style:"int",v:r=>Math.round(N(r[k])*1000)};
+  if(k==="pop_natural_rate") return {h:t+" (yearly)",w:12,style:"pct1",v:r=>N(r[k])};
   if(k==="control"||k==="control_wtd") return {h:t,w:11,style:"pct",v:r=>N(r[k])};
   if(k==="discipline_est"||k==="levy_combat_est") return {h:t,w:14,style:"pct1",v:r=>N(r[k])};
   if(k==="loan_interest"||k==="bond_interest") return {h:t+" (yearly)",w:13,style:"pct1",v:r=>N(r[k==="loan_interest"?"loans":"bonds"])?N(r[k]):null};
@@ -1465,14 +1490,13 @@ const NATION_COLS=[
   {h:"Player",w:18,style:"text",v:r=>r.is_player?r.player:"AI"}];
 function exportExcel(){
   const cols=[];
-  // the Levies column holds raised and potential levies: export both, unless
-  // Potential levies is also a column of its own
-  const keys=COLS.map(c=>c.k).flatMap(k=>k==="levies"&&!chosen.includes("levies_potential")?["levies","levies_potential"]:[k]);
+  // the Levies column also shows the raised ones: export them too, unless
+  // Levies raised is a column of its own
+  const keys=COLS.map(c=>c.k).flatMap(k=>k==="levies"&&!chosen.includes("levies_raised")?["levies","levies_raised"]:[k]);
   keys.forEach(k=>{
     if(k==="_sp") return;
     if(k==="tag"){ cols.push(...NATION_COLS); return; }
     const col=xlCol(k); cols.push(col);
-    if(k==="levies") col.h="Levies raised (men)";
     if(showDelta&&MULTI) cols.push({h:col.h.replace(/ \(men\)$/,"")+" change",w:13,style:col.style,
       v:r=>{const b=snapRow(cmpFrom,r.id); return b&&(k in b)?col.v(r)-col.v(b):null;}});
   });
