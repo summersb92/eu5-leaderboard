@@ -6,6 +6,13 @@
    "steam_build": 24187685,
    "built": "2026-09-24",
    "flags": 1937
+  },
+  {
+   "version": "1.4.5",
+   "name": "Río Salado",
+   "steam_build": 26211608,
+   "built": "2026-10-29",
+   "flags": 1955
   }
  ]
 }

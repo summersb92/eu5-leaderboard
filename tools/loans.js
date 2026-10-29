@@ -4,7 +4,7 @@
 
      node tools/loans.js <save.eu5> [TAG] [--bond] [--rate=8.5] [--term=60] [--budget=500]
 
-   Needs gamedata/1.3.11/rights.json, loans.json and proximity.json. */
+   Needs gamedata/<newest version>/rights.json, loans.json and proximity.json. */
 "use strict";
 const fs = require("fs"), path = require("path"), vm = require("vm");
 
@@ -13,7 +13,10 @@ const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const flag = (k) => { const f = process.argv.find((a) => a.startsWith("--" + k + "=")); return f ? parseFloat(f.split("=")[1]) : undefined; };
 const [src, tagArg] = args;
 if (!src) { console.error("usage: node tools/loans.js <save.eu5> [TAG] [--bond] [--rate=%] [--term=months] [--budget=gold]"); process.exit(1); }
-const pack = path.join(ROOT, "gamedata", "1.3.11");
+// the newest game-data pack
+const newest = JSON.parse(fs.readFileSync(path.join(ROOT, "gamedata", "index.json"), "utf8")).packs
+  .map((p) => p.version).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0];
+const pack = path.join(ROOT, "gamedata", newest);
 
 function fileOf(p) {
   const fd = fs.openSync(p, "r"), size = fs.statSync(p).size;

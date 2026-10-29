@@ -45,15 +45,25 @@ filter.
 
 ## Saves shared between pages
 
-`js/saves.js` keeps the remembered saves (file handles in IndexedDB, Chrome
-and Edge) for all three pages. When the leaderboard finishes a build it
-records its newest save as the *leaderboard save* and announces it on a
-`BroadcastChannel`, passing the file itself. The capital finder and urban
-rights advisor show that save and the recent list above their drop zone,
-load it on opening when the browser still allows access to the file
-(otherwise one click), and reload whenever the leaderboard finishes a new
-build in another tab, staying on the nation you had picked. Saves dropped
-on either page join the recent list too.
+The save follows you from page to page. `js/saves.js` keeps one *current
+save* for every page: the File itself, stored in IndexedDB, so any page can
+load it without a permission prompt, in any browser. Whichever page last
+opened a save sets it: the leaderboard its newest save after a build, a tool
+page the save dropped, picked or reopened there. The change is announced on
+a `BroadcastChannel`, and pages also check when they come back into view
+(switching tabs, back/forward).
+
+- The tool pages load the current save as they open and reload when another
+  page makes a different save current. The box above the drop zone names it
+  and the page it came from, beside the recent list.
+- The leaderboard keeps its last report in IndexedDB and shows it again at
+  once when you come back. If a different save became current since that
+  report was built, it builds that save instead.
+- The nation picked on any page (by tag, in `localStorage`) is the one the
+  other pages open on, when the save has it.
+
+Remembered saves (file handles, Chrome and Edge) are shared by every page
+too; saves opened on any page join the recent list.
 
 ## Share links
 
@@ -83,7 +93,10 @@ level) and `pack.json` (game version, version name, Steam
 build). `gamedata/index.json` lists the packs. A report uses the pack for
 the version its save records, else the newest, and says which it used.
 
-Current pack: **EU5 1.3.11 "Pavia"**, Steam build 24187685, 1,937 flags.
+Current packs: **EU5 1.4.5 "Río Salado"**, Steam build 26211608, 1,955 flags,
+29,124 locations (1.4 redrew the map, so 1.4 saves need this pack; 1.4.0-1.4.4
+beta saves fall back to it as the newest), and **EU5 1.3.11 "Pavia"**, Steam
+build 24187685, 1,937 flags, for older saves.
 The page doesn't link a game folder any more; the worker still can, and the
 pack builder uses that.
 

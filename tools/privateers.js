@@ -12,7 +12,7 @@
          on, for saves that don't name one (multiplayer hotjoin saves).
          Multiplayer oos/ folders hold plaintext hotjoin saves from 1337.4.1.
 
-   Needs gamedata/<version>/privateer.json and proximity.json (default 1.3.11). */
+   Needs gamedata/<version>/privateer.json and proximity.json (default: the newest pack). */
 "use strict";
 const fs = require("fs"), path = require("path"), vm = require("vm");
 
@@ -25,7 +25,9 @@ if (!["rank", "start"].includes(cmd) || !src) {
     "       node tools/privateers.js start <save.eu5> [version] [--you=TAG]");
   process.exit(1);
 }
-const version = cmd === "start" ? arg3 || "1.3.11" : "1.3.11";
+const newest = JSON.parse(fs.readFileSync(path.join(ROOT, "gamedata", "index.json"), "utf8")).packs
+  .map((p) => p.version).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0];
+const version = cmd === "start" ? arg3 || newest : newest;
 const pack = path.join(ROOT, "gamedata", version);
 
 // A File-like view of a save on disk, as the worker expects.
