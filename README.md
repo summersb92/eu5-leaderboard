@@ -79,6 +79,13 @@ gist and reuses its link instead of making another. Different saves get a
 new link, with an option to put them behind the campaign's earlier link. Viewers read the gist through the GitHub API (60 requests an hour
 per viewer) and fall back to the raw gist file.
 
+The report goes up gzipped and base64-encoded as `eu5-standings.json.gz.b64`
+(about a third smaller: 1.2 MB for a one-save 1442 report with the map);
+links made before that hold plain `eu5-standings.json`, which viewers still
+read. GitHub sometimes never answers a large upload, so reads give up after
+30 seconds and uploads after 2 minutes, with a message saying so; the share
+box shows which step it is on.
+
 ## Game-data packs
 
 `gamedata/<version>/` holds what reports need from the game, so nobody has

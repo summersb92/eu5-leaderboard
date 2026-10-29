@@ -710,6 +710,23 @@ function addToCurrent(files) {
 // fetches the gist and shows the report without any upload controls. Links
 // are kept per campaign and updated in place, so players keep one link.
 const GIST_FILE = "eu5-standings.json";
+// Reports are stored gzipped and base64-encoded (about a third smaller, and
+// under the 1 MB the gist API returns inline); links made before that hold
+// GIST_FILE as plain JSON.
+const GIST_FILE_GZ = "eu5-standings.json.gz.b64";
+async function gzipBase64(text) {
+  const buf = new Uint8Array(await new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+  let s = "";
+  for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+async function gunzipBase64(b64) {
+  const bin = atob(b64.trim()), buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+}
+// GitHub sometimes never answers a large upload; give up instead of waiting forever
+const GIST_TIMEOUT = { read: 30000, write: 120000 };
 const TOKEN_KEY = "eu5gisttoken", LINKS_KEY = "eu5links";
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
@@ -744,17 +761,31 @@ function sharePayload() {
 }
 
 async function gistApi(method, path, body) {
-  const r = await fetch("https://api.github.com" + path, {
-    method,
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: "Bearer " + shareToken(),
-      "X-GitHub-Api-Version": "2022-11-28",
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const json = await r.json().catch(() => ({}));
+  const ctl = new AbortController(), ms = method === "GET" ? GIST_TIMEOUT.read : GIST_TIMEOUT.write;
+  const timer = setTimeout(() => ctl.abort(), ms);
+  let r, json;
+  try {
+    r = await fetch("https://api.github.com" + path, {
+      method,
+      signal: ctl.signal,
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: "Bearer " + shareToken(),
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    json = await r.json().catch(() => ({}));
+  } catch (e) {
+    const err = new Error(ctl.signal.aborted
+      ? `GitHub didn't answer within ${ms / 1000} seconds`
+      : "Couldn't reach GitHub (" + (e.message || e) + ")");
+    err.status = ctl.signal.aborted ? "timeout" : "network";
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!r.ok) {
     const err = new Error(json.message || "GitHub said " + r.status);
     err.status = r.status;
@@ -802,7 +833,7 @@ async function findGistByKey(key) {
   const tag = keyTag(key);
   for (let page = 1; page <= 5; page++) {
     const list = await gistApi("GET", `/gists?per_page=100&page=${page}`);
-    const hit = list.find((g) => (g.description || "").includes(tag) && g.files && g.files[GIST_FILE]);
+    const hit = list.find((g) => (g.description || "").includes(tag) && g.files && (g.files[GIST_FILE_GZ] || g.files[GIST_FILE]));
     if (hit) return hit;
     if (list.length < 100) break;
   }
@@ -832,16 +863,23 @@ async function publishShare(replace) {
   if (!current) return;
   if (!shareToken()) { setShareState("sharesetup"); return; }
   setShareState("sharebusy");
+  const step = (t) => { $("sharestep").textContent = t; };
+  step("Packing the report…");
   const key = current.key, links = savedLinks(), kl = keyLinks(), camp = campaignKey();
   const w = current.data.world;
-  const body = {
-    description: `EU5 standings ${w.date} (${current.data.rows.length} nations) - EU5 Leaderboard ${keyTag(key)}`,
-    files: { [GIST_FILE]: { content: JSON.stringify({ ...sharePayload(), key }) } },
-  };
-  const patch = async (id) => {
-    try { return await gistApi("PATCH", "/gists/" + id, body); } catch (e) { if (e.status === 404) return null; throw e; }
-  };
   try {
+    const packed = await gzipBase64(JSON.stringify({ ...sharePayload(), key }));
+    const body = {
+      description: `EU5 standings ${w.date} (${current.data.rows.length} nations) - EU5 Leaderboard ${keyTag(key)}`,
+      // the plain file of older links becomes a pointer, so no gist keeps a stale copy
+      files: { [GIST_FILE_GZ]: { content: packed },
+        [GIST_FILE]: { content: JSON.stringify({ eu5leaderboard: 1, moved: GIST_FILE_GZ }) } },
+    };
+    const size = (packed.length / 1e6).toFixed(1) + " MB";
+    const patch = async (id) => {
+      step(`Updating your link (${size})…`);
+      try { return await gistApi("PATCH", "/gists/" + id, body); } catch (e) { if (e.status === 404) return null; throw e; }
+    };
     let gist = null, how;
     if (replace && links[camp]) {
       gist = await patch(links[camp].id);
@@ -852,12 +890,14 @@ async function publishShare(replace) {
       const known = kl[key];
       if (known) gist = await patch(known.id);
       if (!gist) {
+        step("Looking for an earlier link to these saves…");
         const found = await findGistByKey(key);
         if (found) gist = await patch(found.id);
       }
       if (gist) how = "reused";
     }
     if (!gist) {
+      step(`Uploading the report to a new gist (${size})…`);
       gist = await gistApi("POST", "/gists", { ...body, public: false });
       how = "new";
     }
@@ -890,6 +930,11 @@ async function publishShare(replace) {
       setShareState("sharesetup");
     } else if (e.status === 422 || e.status === 413) {
       shareError("GitHub turned the report down as too large. Try building it without the political map.");
+    } else if (e.status === "timeout") {
+      shareError(e.message + ". It may still have worked: try again and, if it did, you'll get the same link. " +
+        "If it keeps happening, build the report from fewer saves or without the political map.");
+    } else if (e.status === "network") {
+      shareError(e.message + ". Check your connection, or whether an extension or firewall blocks api.github.com.");
     } else {
       shareError("Couldn't create the link: " + (e.message || e) + ".");
     }
@@ -929,15 +974,22 @@ async function loadShared(id, owner) {
       if (r.status === 404) return bad();
       if (r.ok) {
         const g = await r.json();
-        const f = g.files && g.files[GIST_FILE];
+        // newer links hold the gzipped file; older ones plain JSON
+        const gz = g.files && g.files[GIST_FILE_GZ], f = gz || (g.files && g.files[GIST_FILE]);
         if (!f) return bad();
         text = f.truncated ? await fetch(f.raw_url).then((x) => x.text()) : f.content;
+        if (gz) text = await gunzipBase64(text);
       }
-    } catch (e) { /* fall through to the raw address */ }
+    } catch (e) { text = null; /* fall through to the raw address */ }
     // the API allows each viewer 60 requests an hour; the raw file has no limit
     if (text == null && owner && /^[A-Za-z0-9-]{1,39}$/.test(owner)) {
-      const r = await fetch(`https://gist.githubusercontent.com/${owner}/${id}/raw/${GIST_FILE}`);
-      if (r.ok) text = await r.text();
+      const raw = (file) => fetch(`https://gist.githubusercontent.com/${owner}/${id}/raw/${file}`);
+      const r = await raw(GIST_FILE_GZ);
+      if (r.ok) text = await gunzipBase64(await r.text());
+      else {
+        const p = await raw(GIST_FILE);
+        if (p.ok) text = await p.text();
+      }
     }
     if (text == null) throw new Error("GitHub didn't send the report — try again in a minute.");
     const payload = JSON.parse(text);
