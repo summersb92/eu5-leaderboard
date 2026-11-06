@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root {
+  --bg: #f4f3ef; --surface: #fff; --ink: #1e2330; --muted: #5c6371; --line: #dad8d0;
+  --accent: #2f5fa8; --good: #1f7a4d; --warn: #9a6a00; --bad: #b03a2e; --tint: #eef2f9;
+  --body: "Segoe UI", system-ui, sans-serif; --mono: Consolas, ui-monospace, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #14161b; --surface: #1c1f26; --ink: #e7e5e0; --muted: #a3a8b3; --line: #333744;
+  --accent: #6f9ae0; --good: #5cc28d; --warn: #e0b04a; --bad: #ef8a80; --tint: #222a38; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--body); }
+main { max-width: 1400px; margin: 0 auto; padding: 20px 18px 60px; }
+h1 { font-size: 22px; margin: 0 0 2px; }
+h2 { font-size: 16px; margin: 26px 0 8px; }
+.sub { color: var(--muted); margin: 0 0 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 22px; }
+.ctl { display: flex; flex-direction: column; gap: 3px; }
+.ctl .top { display: flex; justify-content: space-between; gap: 8px; }
+.ctl .val { font-family: var(--mono); color: var(--accent); font-weight: 600; }
+.ctl small { color: var(--muted); font-size: 12px; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+select, input[type=search] { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--ink); }
+.check { display: flex; gap: 6px; align-items: center; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-top: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.card .k { color: var(--muted); font-size: 12px; }
+.card .v { font: 600 20px var(--mono); }
+.pos { color: var(--good); } .neg { color: var(--bad); } .mid { color: var(--warn); }
+.filters { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin: 10px 0; }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--surface); cursor: pointer; user-select: none; font-weight: 600; }
+th:hover { color: var(--accent); }
+td.l, th.l { text-align: left; }
+td { font-family: var(--mono); } td.l { font-family: var(--body); }
+tr.plan td { background: var(--tint); }
+tr.blocked td { color: var(--muted); }
+.tag { font: 12px var(--body); padding: 1px 6px; border-radius: 10px; border: 1px solid currentColor; }
+.note { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+.i { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--muted);
+  color: var(--muted); font: 600 10px/1 var(--body); font-style: normal; cursor: help; vertical-align: middle; margin-left: 4px; user-select: none; }
+.i:hover, .i.on { color: var(--accent); border-color: var(--accent); }
+.tipbox { position: fixed; z-index: 50; max-width: 340px; background: var(--ink); color: var(--bg); font: 12.5px/1.45 var(--body);
+  padding: 7px 10px; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.25); pointer-events: none; display: none; white-space: normal; }
+.ctl small[hidden], .explain { display: none !important; }
+pre { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; font: 12.5px var(--mono); }
+.answer { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin: 0 0 12px; }
+.answer .big { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; background: var(--surface); border: 2px solid var(--accent); border-radius: 8px; padding: 4px 12px; }
+.answer .big .k { color: var(--muted); font-size: 12px; line-height: 1.2; max-width: 120px; }
+.answer .big .v { font: 700 24px var(--mono); color: var(--accent); }
+.answer .info { flex: 1 1 320px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-size: 12.5px; line-height: 1.35; }
+.topbar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin: 0 0 12px; }
+.topbar select { font-size: 15px; padding: 5px 8px; }
+button { font: inherit; padding: 5px 12px; border-radius: 5px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+button.ghost { background: transparent; color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+<p class="sub"><a href="./">&larr; Leaderboard</a> · <a href="loans.html">Loan &amp; build advisor</a> · <a href="placement.html">Capital finder</a></p>
+<h1>__TITLE__</h1>
+<p class="sub" id="sub"></p>
+<div class="topbar">
+  <label>Nation <select id="nation"></select></label>
+  <button class="ghost" id="reset" title="Set every slider back to this nation's values from the save">Reset to nation's values</button>
+  <label>Mass build covers <select id="mbkind">
+    <option value="expand">Expanding existing buildings</option>
+    <option value="all">Every project (incl. new buildings, RGOs)</option>
+  </select></label>
+</div>
+<div class="answer" id="answer"></div>
+
+<div class="panel">
+  <div class="controls">
+    <label class="ctl"><span class="top">Loan interest a year <span class="val" id="v-rate"></span></span>
+      <input type="range" id="rate" min="1" max="12" step="0.01" value="3.5"><small id="ratenote"></small></label>
+    <label class="ctl"><span class="top">How you finance it</span>
+      <select id="mode">
+        <option value="roll">Loan, roll it over (interest only)</option>
+        <option value="repay">Loan, repay by end of term</option>
+        <option value="bond">Government bond (never due)</option>
+      </select><small>Rolling over costs −0.03 creditworthiness per extension.</small></label>
+    <label class="ctl" id="termctl"><span class="top">Repay within <span class="val" id="v-term"></span></span>
+      <input type="range" id="term" min="12" max="240" step="12" value="60"><small>Only used for "repay by end of term".</small></label>
+    <label class="ctl"><span class="top">Borrow up to <span class="val" id="v-budget"></span></span>
+      <input type="range" id="budget" min="0" max="20000" step="100" value="3000"><small>Fills the plan with the best projects first.</small></label>
+    <label class="ctl"><span class="top">Tax rates vs the save <span class="val" id="v-tax"></span></span>
+      <input type="range" id="tax" min="50" max="200" step="5" value="100"><small id="taxnote"></small></label>
+    <label class="ctl"><span class="top">Extra control everywhere <span class="val" id="v-ctl"></span></span>
+      <input type="range" id="ctl" min="0" max="50" step="1" value="0"><small>Governors, roads, laws since the save (capped at 100%).</small></label>
+    <label class="ctl"><span class="top">Building profit vs the save <span class="val" id="v-profit"></span></span>
+      <input type="range" id="profit" min="25" max="300" step="5" value="100"><small>Prices and demand have moved since the save.</small></label>
+    <label class="ctl"><span class="top">Build cost vs the save <span class="val" id="v-cost"></span></span>
+      <input type="range" id="cost" min="50" max="400" step="5" value="100"><small id="costnote"></small></label>
+    <label class="ctl"><span class="top">Upkeep per level, gold/mo <span class="val" id="v-upk"></span></span>
+      <input type="range" id="upk" min="0" max="0.5" step="0.01" value="0"><small>Set this if your budget charges buildings separately (trade offices ≈ 0.07).</small></label>
+    <label class="ctl"><span class="top">Court spending slider <span class="val" id="v-court"></span></span>
+      <input type="range" id="court" min="0" max="100" step="1" value="50"><small id="courtnote"></small></label>
+    <label class="ctl"><span class="top">Diplomatic spending slider <span class="val" id="v-diplo"></span></span>
+      <input type="range" id="diplo" min="0" max="100" step="1" value="50"><small id="diplonote"></small></label>
+    <label class="ctl"><span class="top">Stability investment slider <span class="val" id="v-stab"></span></span>
+      <input type="range" id="stab" min="0" max="100" step="1" value="0"><small>Each is 10% of tax base × slider: new tax base raises all three.</small></label>
+    <div class="ctl">
+      <label class="check"><input type="checkbox" id="spendon" checked> Count extra court, diplomatic and stability spending</label>
+      <label class="check"><input type="checkbox" id="bank"> State Bank (−0.5% interest)</label>
+      <label class="check"><input type="checkbox" id="crowd" checked> At most double a building's levels in its market</label>
+      <label class="check"><input type="checkbox" id="showblocked"> Show blocked projects</label>
+    </div>
+  </div>
+</div>
+
+<div class="cards" id="cards"></div>
+
+<h2 id="h-projects">Projects</h2>
+<div class="filters">
+  <input type="search" id="q" placeholder="Search location or building…" size="28">
+  <label>Building / resource <select id="btype"><option value="">All</option></select></label>
+  <label>Market <select id="market"><option value="">All</option></select></label>
+  <label>Type <select id="kind"><option value="">All</option><option value="expand">Expand existing</option><option value="new">New building</option><option value="rgo">RGO expansion</option></select></label>
+  <label>Show <select id="which"><option value="pay">Pays for its loan</option><option value="plan">In the plan</option><option value="all">Everything</option></select></label>
+  <span class="note" id="count"></span>
+</div>
+<div class="tablewrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+<p class="explain" data-tip-at="h-projects">Treasury per level = profit × wealth factor (1.06 buildings, 0.76 RGOs) × control × (the location's estate-weighted tax rate − extra spending) − upkeep. The new tax base is profit × wealth factor × control; court, diplomatic and stability
+spending each grow by 10% of it × their slider (× the nation's cost modifiers, read from the save), shown as "Spending/lv".
+"Min profit" is the monthly profit per level the building needs to cover its financing. "Pays up to" is the highest yearly interest rate at which it still covers the interest.
+New buildings use the average profit per level of that building elsewhere in the same market. Tinted rows are in the plan.</p>
+
+<h2 id="h-bytype">By building</h2>
+<p class="explain" data-tip-at="h-bytype">Min control and Min profit are the best mass-build filters for that building alone: one level in every location that passes both, within "Borrow up to".</p>
+<div class="tablewrap"><table id="bytype"><thead></thead><tbody></tbody></table></div>
+
+<h2>Discord table <button class="ghost" id="copy">Copy</button></h2>
+<pre id="discord"></pre>
+
+<p class="note" id="foot"></p>
+</main>
+<script>
+const DATA = __DATA__;
+const $ = (id) => document.getElementById(id);
+const f = (v, d = 2) => (isFinite(v) ? v.toFixed(d) : "∞");
+const pct = (v, d = 0) => (v * 100).toFixed(d) + "%";
+const RANK = { rural_settlement: "rural", town: "town", city: "city" };
+let N = DATA.nations[0], SP = N.spend;
+DATA.nations.forEach((n, i) => $("nation").add(new Option(n.name + " (" + n.tag + ")" + (n.player ? " · " + n.player : ""), i)));
+$("foot").textContent = `Data: ${DATA.save}, game data ${DATA.pack}. Rebuild from a newer plaintext save: ` +
+  `node tools/build-finder.js "<save>" players build-finder.html  (or a tag list like MLO,BOH)`;
+
+function pickNation(i) {
+  N = DATA.nations[i]; SP = N.spend;
+  $("sub").textContent = `${N.name} at ${DATA.date} · ${N.projects.filter((p) => !p.blocked).length} buildable projects · ` +
+    `treasury ${f(N.econ.gold, 0)}, income ${f(N.econ.income, 0)}/mo, debt ${f(N.econ.debt, 0)}`;
+  $("taxnote").textContent = `Save: ${pct(N.capture, 1)} of tax base reaches the treasury on average.`;
+  $("costnote").textContent = `Save: ${N.name} pays ×${f(N.costFactor)} of base price (~${f(DATA.baseAge1 * N.costFactor, 0)} for an age-1 building). Raise for later-age buildings.`;
+  $("courtnote").textContent = `Save: ${pct(SP.court.setting)} → ${f(SP.court.spent, 1)} gold/mo on ${f(SP.taxBase, 0)} tax base (cost ×${f(SP.court.k)}).`;
+  $("diplonote").textContent = `Save: ${pct(SP.diplo.setting)} → ${f(SP.diplo.spent, 1)} gold/mo (cost ×${f(SP.diplo.k)}).`;
+  setDefaults();
+  const bsel = $("btype"); bsel.length = 1;
+  const count = new Map();
+  for (const x of N.projects) if (!x.blocked && x.levels > 0) count.set(typeName(x), (count.get(typeName(x)) || 0) + 1);
+  for (const [t, n] of [...count].sort((a, b) => a[0].localeCompare(b[0]))) bsel.add(new Option(`${t} (${n})`, t));
+  const m = $("market"); m.length = 1;
+  for (const x of [...new Set(N.projects.map((p) => p.market))].sort()) m.add(new Option(x, x));
+}
+
+// the interest the nation would pay now: a loan or a bond, from the game's own modifiers (see tools/build-finder.js)
+const rateFor = (mode) => (mode === "bond" ? N.interest.bond : N.interest.loan);
+function rateNote() {
+  const I = N.interest, k = $("mode").value === "bond" ? "bond" : "bank";
+  $("ratenote").textContent = `${N.name} pays ${pct(I.loan, 2)} on loans, ${pct(I.bond, 2)} on bonds: ` +
+    I.parts.map((x) => `${x.what.replace(/_/g, " ")} ${x[k] >= 0 && x.what !== "base" ? "+" : ""}${(x[k] * 100).toFixed(2)}`).join(", ");
+}
+function setDefaults() {
+  const set = (id, v) => { $(id).value = v; };
+  $("mode").value = "roll"; $("bank").checked = false; $("spendon").checked = true;
+  set("rate", (rateFor("roll") * 100).toFixed(2));
+  set("tax", 100); set("ctl", 0); set("profit", 100); set("cost", 100); set("upk", 0);
+  set("court", Math.round(SP.court.setting * 100)); set("diplo", Math.round(SP.diplo.setting * 100)); set("stab", Math.round(SP.stab.setting * 100));
+  rateNote();
+}
+
+// "Tailors' Guild", "Wheat RGO": a project without its Build/Expand
+const typeName = (r) => r.what.replace(/^(Expand|Build) /, "");
+const typeOk = (r) => !$("btype").value || typeName(r) === $("btype").value;
+
+/* The two numbers for EU5's mass build: the minimum control and minimum profit per level that,
+   building one level in every matching location, give the most net gold a month within the budget.
+   items: {ctl, profit, net, cost}. Tries every control threshold, sweeping profit from high to low. */
+function bestBox(items, budget) {
+  const byP = items.slice().sort((a, b) => b.profit - a.profit);
+  const Cs = [...new Set(items.map((r) => r.ctl))].sort((a, b) => b - a);
+  let best = null;
+  for (const C of Cs) {
+    let net = 0, cost = 0;
+    for (let i = 0; i < byP.length; i++) {
+      const r = byP[i];
+      if (r.ctl < C) continue;
+      net += r.net; cost += r.cost;
+      if (cost > budget) break;
+      // only stop where the next profit differs: the filter takes every tie
+      let j = i + 1; while (j < byP.length && byP[j].ctl < C) j++;
+      if (j < byP.length && byP[j].profit === r.profit) continue;
+      if (!best || net > best.net) best = { C, P: r.profit, net, cost };
+    }
+  }
+  if (!best || best.net <= 0) return null;
+  // round the thresholds down to what the game shows, then count what those settings really build
+  const C = Math.floor(best.C * 100 + 1e-9) / 100, P = Math.floor(best.P * 100 + 1e-9) / 100;
+  const got = items.filter((r) => r.ctl >= C - 1e-9 && r.profit >= P - 1e-9);
+  return { C, P, n: got.length, net: got.reduce((s, r) => s + r.net, 0), cost: got.reduce((s, r) => s + r.cost, 0),
+    losers: got.filter((r) => r.net < 0).length };
+}
+const mbItems = (rows) => rows.filter((r) => !r.blocked && r.levels > 0 && typeOk(r) && ($("btype").value || $("mbkind").value === "all" || r.kind === "expand"));
+
+function answer(rows, o) {
+  const b = bestBox(mbItems(rows), o.budget);
+  if (!b) { $("answer").innerHTML = `<div class="info">Nothing is worth mass building at these settings: no control and profit filters earn more than their ${o.mode === "repay" ? "loan repayments" : "interest"}.</div>`; return; }
+  $("answer").innerHTML =
+    `<div class="big"><div class="k">Min control <span class="i" data-tip="The location control filter to set in EU5's mass build.">i</span></div><div class="v">${Math.round(b.C * 100)}%</div></div>` +
+    `<div class="big"><div class="k">Min profit <span class="i" data-tip="Monthly profit per level of the building (its profit ÷ its level), in gold.">i</span></div><div class="v">${f(b.P, 2)}</div></div>` +
+    `<div class="info">One level in each of <b>${b.n}</b> locations · costs <b>${f(b.cost, 0)}</b> gold (budget ${f(o.budget, 0)}) · ` +
+    `net <b class="${b.net >= 0 ? "pos" : "neg"}">${f(b.net, 2)}</b>/mo after financing and extra spending` +
+    (b.losers ? ` · includes ${b.losers} that lose a little, outweighed by the rest` : " · every one pays") +
+    ` <span class="i" data-tip="Best filters for ${$("btype").value ? $("btype").value.replace(/'/g, "&#39;") + " only (new and existing; set in the Projects section)" : $("mbkind").value === "all" ? "every kind of project" : "expanding buildings you already have"}. Builds one level in every location that passes both filters, within &quot;Borrow up to&quot; (raise it to allow a bigger build). Per building type: see &quot;By building&quot;.">i</span></div>`;
+}
+
+const S = { sort: "ratio", dir: -1 };
+const cols = [
+  ["loc", "Location", "l"], ["market", "Market", "l"], ["what", "Project", "l"], ["level", "Lv"], ["levels", "+Lv"],
+  ["cost", "Cost/lv"], ["profit", "Profit/lv"], ["minProfit", "Min profit"], ["ctl", "Control"], ["cap", "Tax"],
+  ["spend", "Spending/lv"], ["R", "Treasury/lv"], ["need", "Finance/lv"], ["net", "Net/lv"], ["beRate", "Pays up to"], ["take", "Plan"], ["verdict", "", "l"],
+];
+$("tbl").tHead.innerHTML = "<tr>" + cols.map(([k, t, c]) => `<th data-k="${k}" class="${c || ""}">${t}</th>`).join("") + "</tr>";
+$("tbl").tHead.onclick = (e) => { const k = e.target.dataset.k; if (!k) return; S.dir = S.sort === k ? -S.dir : (cols.find((c) => c[0] === k)[2] ? 1 : -1); S.sort = k; render(); };
+
+function settings() {
+  const v = (id) => parseFloat($(id).value);
+  return { rate: Math.max(0.1, v("rate") - ($("bank").checked ? 0.5 : 0)) / 100, mode: $("mode").value, term: v("term"), budget: v("budget"),
+    tax: v("tax") / 100, ctl: v("ctl") / 100, profit: v("profit") / 100, cost: v("cost") / 100, upk: v("upk"),
+    // extra court + diplomatic + stability spending per gold of new tax base
+    spendRate: $("spendon").checked ? 0.1 * (v("court") / 100 * SP.court.k + v("diplo") / 100 * SP.diplo.k + v("stab") / 100 * SP.stab.k) : 0 };
+}
+
+function compute(o) {
+  const rows = N.projects.map((p) => {
+    const ctl = Math.min(1, p.control + o.ctl), cap = Math.min(1, p.capture * o.tax);
+    const base = p.wealth * ctl;                            // new tax base per gold of profit
+    const per = base * (cap - o.spendRate);                 // treasury gold per gold of profit, after extra spending
+    const cost = p.cost * o.cost, profit = p.profit * o.profit;
+    const spend = profit * base * o.spendRate;
+    const R = profit * per - o.upk;
+    const interest = cost * o.rate / 12;
+    const need = o.mode === "repay" ? interest + cost / o.term : interest;
+    const net = R - need;
+    const minProfit = per > 0 ? (need + o.upk) / per : Infinity;
+    const beRate = cost > 0 ? (12 * R) / cost : 0;
+    const verdict = p.blocked ? "blocked" : R >= need ? "pays" : R >= interest ? "interest" : R > 0 ? "loss" : "none";
+    return { ...p, ctl, cap, cost, profit, spend, R, need, net, minProfit, beRate, ratio: cost > 0 ? net / cost : 0, verdict, take: 0 };
+  });
+  // greedy plan: best net per gold first, within the budget
+  const added = new Map(); let spent = 0;
+  for (const r of rows.filter((r) => r.verdict === "pays" && r.levels > 0).sort((a, b) => b.ratio - a.ratio)) {
+    const k = r.type + ":" + r.market;
+    const room = $("crowd").checked && r.kind !== "rgo" ? Math.max(1, r.marketLevels) - (added.get(k) || 0) : Infinity;
+    const n = Math.min(r.levels, room, Math.floor((o.budget - spent) / r.cost + 1e-9));
+    if (n <= 0) continue;
+    r.take = n; added.set(k, (added.get(k) || 0) + n); spent += n * r.cost;
+  }
+  return rows;
+}
+
+function cards(rows, o) {
+  const plan = rows.filter((r) => r.take > 0), pays = rows.filter((r) => r.verdict === "pays");
+  const sum = (a, fn) => a.reduce((s, r) => s + fn(r), 0);
+  const P = sum(plan, (r) => r.take * r.cost), R = sum(plan, (r) => r.take * r.R), I = P * o.rate / 12;
+  const need = o.mode === "repay" ? I + P / o.term : I;
+  const lv = sum(pays, (r) => r.levels), cost = sum(pays, (r) => r.levels * r.cost);
+  const avgCost = plan.length ? P / sum(plan, (r) => r.take) : DATA.baseAge1 * N.costFactor * o.cost;
+  const c = [
+    ["Effective rate", pct(o.rate, 2), ""],
+    ["Projects that pay", `${pays.length}`, `${lv} levels · ${f(cost, 0)} gold`],
+    ["Plan spends", f(P, 0), `${plan.length} projects · ${sum(plan, (r) => r.take)} levels`],
+    ["Plan returns /mo", f(R, 2), `after ${f(sum(plan, (r) => r.take * r.spend), 2)} extra court/diplo/stability`],
+    ["Financing /mo", f(need, 2), o.mode === "repay" ? `interest ${f(I, 2)} + principal` : "interest only"],
+    ["Plan net /mo", f(R - need, 2), R - need >= 0 ? "pos" : "neg"],
+    ["Plan payback", R - I > 0 ? f(P / (R - I) / 12, 1) + " yr" : "never", "from net of interest"],
+    ["Rule of thumb", "cost ÷ " + f(1 / ((o.mode === "repay" ? o.rate / 12 + 1 / o.term : o.rate / 12) / (1.055 * (N.capture * o.tax - o.spendRate))), 0), "min profit/lv at full control"],
+    // the thresholds the plan actually reaches down to: use these as mass-build filters
+    ["Plan: lowest profit/lv", plan.length ? f(Math.min(...plan.map((r) => r.profit)), 2) : "–",
+      pays.length ? `all that pay: ${f(Math.min(...pays.map((r) => r.profit)), 2)}` : "nothing pays"],
+    ["Plan: lowest control", plan.length ? pct(Math.min(...plan.map((r) => r.ctl))) : "–",
+      pays.length ? `all that pay: ${pct(Math.min(...pays.map((r) => r.ctl)))}` : "nothing pays"],
+    ["Plan: highest min profit", plan.length ? f(Math.max(...plan.map((r) => r.minProfit)), 2) : "–", "profit/lv a plan build needs to break even"],
+  ];
+  $("cards").innerHTML = c.map(([k, v, s]) => `<div class="card"><div class="k">${k}</div><div class="v ${s === "pos" ? "pos" : s === "neg" ? "neg" : ""}">${v}</div>` +
+    (s && s !== "pos" && s !== "neg" ? `<div class="k">${s}</div>` : "") + `</div>`).join("");
+  return plan;
+}
+
+const VERD = { pays: ["pays", "pos"], interest: ["interest only", "mid"], loss: ["loses", "neg"], none: ["no return", "neg"], blocked: ["blocked", ""] };
+function render() {
+  const o = settings();
+  $("v-rate").textContent = $("rate").value + "%" + ($("bank").checked ? " → " + pct(o.rate, 1) : "");
+  $("v-term").textContent = o.term + " mo (" + o.term / 12 + " yr)";
+  $("v-budget").textContent = f(o.budget, 0) + " gold";
+  $("v-tax").textContent = $("tax").value + "%";
+  $("v-ctl").textContent = "+" + $("ctl").value + " pts";
+  $("v-profit").textContent = $("profit").value + "%";
+  $("v-cost").textContent = $("cost").value + "%";
+  $("v-upk").textContent = f(o.upk);
+  for (const k of ["court", "diplo", "stab"]) $("v-" + k).textContent = $(k).value + "%";
+  $("termctl").style.opacity = o.mode === "repay" ? 1 : 0.45;
+
+  const rows = compute(o);
+  const plan = cards(rows, o);
+  answer(rows, o);
+  const q = $("q").value.trim().toLowerCase(), mk = $("market").value, kind = $("kind").value, which = $("which").value;
+  let view = rows.filter((r) => (!q || (r.loc + " " + r.what).toLowerCase().includes(q)) && (!mk || r.market === mk) && (!kind || r.kind === kind) && typeOk(r));
+  if (!$("showblocked").checked) view = view.filter((r) => !r.blocked && r.levels > 0);
+  if (which === "pay") view = view.filter((r) => r.verdict === "pays" || r.verdict === "blocked");
+  if (which === "plan") view = view.filter((r) => r.take > 0);
+  const k = S.sort, d = S.dir;
+  view.sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k]) * d : ((a[k] ?? -1e9) - (b[k] ?? -1e9)) * d));
+  $("count").textContent = `${view.length} rows` + (view.length > 400 ? " (first 400 shown)" : "");
+  $("tbl").tBodies[0].innerHTML = view.slice(0, 400).map((r) => {
+    const [vt, vc] = VERD[r.verdict];
+    return `<tr class="${r.take ? "plan" : ""} ${r.blocked ? "blocked" : ""}" title="${r.blocked ? "Blocked: " + r.blocked : r.basis}">` +
+      `<td class="l">${r.loc} <small>${RANK[r.rank] || ""}</small></td><td class="l">${r.market}</td><td class="l">${r.what}</td>` +
+      `<td>${r.kind === "new" ? "–" : r.level}</td><td>${r.levels}</td><td>${f(r.cost, 1)}</td><td>${f(r.profit, 3)}</td>` +
+      `<td class="${r.profit >= r.minProfit ? "pos" : "neg"}">${f(r.minProfit, 3)}</td><td>${pct(r.ctl)}</td><td>${pct(r.cap)}</td><td>${f(r.spend, 3)}</td>` +
+      `<td>${f(r.R, 3)}</td><td>${f(r.need, 3)}</td><td class="${r.net >= 0 ? "pos" : "neg"}">${f(r.net, 3)}</td>` +
+      `<td>${pct(r.beRate, 1)}</td><td>${r.take || ""}</td><td class="l"><span class="tag ${vc}">${r.blocked ? r.blocked : vt}</span></td></tr>`;
+  }).join("");
+
+  // by building type: the best mass-build filters for that building alone, plus how much of it pays
+  const groups = new Map();
+  for (const r of rows.filter((r) => !r.blocked && r.levels > 0)) (groups.get(r.what) || groups.set(r.what, []).get(r.what)).push(r);
+  const bt = [];
+  for (const [what, a] of groups) {
+    const b = bestBox(a, o.budget), pays = a.filter((r) => r.verdict === "pays");
+    if (!b && !pays.length) continue;
+    bt.push({ what, b, n: pays.length, take: a.reduce((s, r) => s + r.take, 0), pnet: a.reduce((s, r) => s + r.take * r.net, 0) });
+  }
+  bt.sort((x, y) => (y.b ? y.b.net : 0) - (x.b ? x.b.net : 0));
+  $("bytype").tHead.innerHTML = `<tr><th class="l">Project</th><th>Min control</th><th>Min profit</th><th>Locations</th><th>Cost</th><th>Net/mo</th><th>Pay on their own</th><th>In plan</th><th>Plan net/mo</th></tr>`;
+  $("bytype").tBodies[0].innerHTML = bt.map((t) => `<tr><td class="l">${t.what}</td>` +
+    (t.b ? `<td>${Math.round(t.b.C * 100)}%</td><td>${f(t.b.P, 2)}</td><td>${t.b.n}</td><td>${f(t.b.cost, 0)}</td><td class="pos">${f(t.b.net, 2)}</td>` : `<td colspan="5" class="l">no filter pays</td>`) +
+    `<td>${t.n}</td><td>${t.take || ""}</td><td>${t.take ? f(t.pnet, 2) : ""}</td></tr>`).join("");
+
+  // Discord: plan lines, greatest to lowest net/mo, under 2000 chars
+  const lines = plan.map((r) => ({ loc: r.loc, what: r.what.replace(/^Expand /, "").replace(/^Build /, "New "), lv: r.take, cost: r.take * r.cost, net: r.take * r.net }))
+    .sort((a, b) => b.net - a.net);
+  const head = `${N.name} builds @ ${pct(o.rate, 1)} ${o.mode === "repay" ? "repay " + o.term / 12 + "y" : o.mode === "bond" ? "bond" : "loan"}, ${DATA.date} data`;
+  const hdr = "Location       | Building             | Lv |  Cost | Net/mo";
+  let body = [], total = { cost: 0, net: 0, lv: 0 };
+  for (const l of lines) {
+    const s = `${l.loc.slice(0, 14).padEnd(14)} | ${l.what.slice(0, 20).padEnd(20)} | ${String(l.lv).padStart(2)} | ${f(l.cost, 0).padStart(5)} | ${f(l.net, 2).padStart(6)}`;
+    if ((head + hdr + body.join("\n") + s).length > 1750) break;
+    body.push(s);
+  }
+  for (const l of lines) { total.cost += l.cost; total.net += l.net; total.lv += l.lv; }
+  const tot = `Total ${lines.length} projects, ${total.lv} levels, ${f(total.cost, 0)} gold, ${f(total.net, 2)}/mo net` + (body.length < lines.length ? ` (top ${body.length} shown)` : "");
+  $("discord").textContent = "```\n" + [head, hdr, "-".repeat(hdr.length), ...body, tot].join("\n") + "\n```";
+}
+// ---- tooltips: every explanation sits behind an (i) marker
+const tipBox = document.body.appendChild(Object.assign(document.createElement("div"), { className: "tipbox" }));
+let tipN = 0;
+function marker(src) {
+  if (!src.id) src.id = "tip" + ++tipN;
+  src.hidden = true;
+  const m = Object.assign(document.createElement("span"), { className: "i", textContent: "i", tabIndex: 0 });
+  m.dataset.src = src.id;
+  return m;
+}
+for (const c of document.querySelectorAll(".ctl")) {
+  const sm = c.querySelector("small"), top = c.querySelector(".top");
+  if (sm && top) top.insertBefore(marker(sm), top.querySelector(".val"));
+}
+for (const n of document.querySelectorAll("[data-tip-at]")) {
+  const h = $(n.dataset.tipAt), m = marker(n);
+  h.insertBefore(m, h.querySelector("button")); // before the Copy button, if any
+}
+const tipText = (el) => el.dataset.tip || ($(el.dataset.src) ? $(el.dataset.src).textContent : "");
+function showTip(el) {
+  const t = tipText(el); if (!t) return;
+  tipBox.textContent = t; tipBox.style.display = "block";
+  const r = el.getBoundingClientRect(), w = tipBox.offsetWidth, h = tipBox.offsetHeight;
+  let x = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), innerWidth - w - 8), y = r.bottom + 6;
+  if (y + h > innerHeight - 8) y = r.top - h - 6;
+  tipBox.style.left = x + "px"; tipBox.style.top = y + "px";
+}
+const hideTip = () => { tipBox.style.display = "none"; };
+document.addEventListener("mouseover", (e) => { const el = e.target.closest(".i"); if (el) showTip(el); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest(".i")) hideTip(); });
+document.addEventListener("focusin", (e) => { const el = e.target.closest(".i"); if (el) showTip(el); });
+document.addEventListener("focusout", hideTip);
+document.addEventListener("click", (e) => { const el = e.target.closest(".i"); if (el) { e.preventDefault(); showTip(el); } else hideTip(); });
+addEventListener("scroll", hideTip, { passive: true });
+
+$("copy").onclick = () => navigator.clipboard.writeText($("discord").textContent).then(() => { $("copy").textContent = "Copied"; setTimeout(() => ($("copy").textContent = "Copy"), 1200); });
+for (const el of document.querySelectorAll("input, select")) if (el.id !== "nation" && el.id !== "mode") el.addEventListener("input", render);
+$("nation").addEventListener("input", () => { pickNation(+$("nation").value); render(); });
+$("mode").addEventListener("input", () => { $("rate").value = (rateFor($("mode").value) * 100).toFixed(2); rateNote(); render(); });
+$("reset").addEventListener("click", () => { setDefaults(); render(); });
+pickNation(0);
+render();
+</script>
+</body>
+</html>

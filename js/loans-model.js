@@ -120,6 +120,15 @@
       gold: f("gold"), income: f("income"), expense: f("expense"), taxIncome: f("last_months_tax_income"),
       debt: f("total_debt"), foreignDebt: f("foreign_debt"), bondDebt: f("bond_debt"), estateDebt: f("estate_debt"),
       credit: f("creditworthiness"), loanCapacity: f("loan_capacity"), rates: pairs(tr),
+      // budget sliders (0-1) and last month's spending per budget line; court, diplomatic and
+      // stability spending are each 0.1 x tax base x slider (x cost modifiers)
+      settings: pairs((chunk.match(/\n\t\tmaintenances=\{([^}]*)\}/) || [])[1] || ""),
+      spent: pairs((chunk.match(/\n\tlast_month_maintenance=\{([^}]*)\}/) || [])[1] || ""),
+      stabilityInvestment: f("stability_investment"),
+      // the game's own tax base (last entry of the yearly series); larger than the sum of location tax
+      taxBaseGame: +(((chunk.match(/\n\thistorical_tax_base=\{([^}]*)\}/) || [])[1] || "").trim().split(/\s+/).pop() || 0),
+      // the whole country block, only when a tool asks for it (tools/build-finder.js reads interest modifiers from it)
+      raw: readEconomy.keepRaw ? chunk : undefined,
     };
   }
 
