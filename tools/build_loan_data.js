@@ -13,7 +13,10 @@
                 population, RGO size and river terms, plus a bonus for cities and
                 megalopolises and the low market access penalty
      rgo        RGO expansion: base gold per method and the price scaling
-     loans      loan, bond and creditworthiness defines */
+     loans      loan, bond and creditworthiness defines
+     interest   every source of loan and bond interest modifiers (tools/interest-sources.js)
+     countryNames  English country names by tag
+     interest   every source of loan and bond interest modifiers (tools/interest-sources.js) */
 "use strict";
 const fs = require("fs"), path = require("path");
 
@@ -142,6 +145,13 @@ const out = {
     "ESTATE_LOAN_DURATION_IN_MONTHS", "BOND_SIZE", "MIN_BOND_SIZE", "CREDITWORTHINESS_REPAY_BONUS", "CREDITWORTHINESS_ORIGINATION_PENALTY",
     "CREDITWORTHINESS_EXTENSION_PENALTY", "CREDITWORTHINESS_BANKRUPTCY_DRAIN", "CREDITWORTHINESS_BANKRUPTCY_YEARLY_RECOVERY",
     "BANKRUPTCY_STAB_LOSS", "BANKRUPTCY_DURATION_IN_MONTHS", "BANKRUPTCY_CONTROL_CHANGE_PERCENT"].map((k) => [k, D(k)])),
+  // every source of loan and bond interest modifiers, for the build finder (tools/interest-sources.js)
+  interest: require("./interest-sources")(game),
+  // English country names by tag, for the build finder's nation list
+  countryNames: (() => { const o = {}; try {
+    const t = read(path.join(game, "main_menu", "localization", "english", "country_names_l_english.yml"));
+    for (const m of t.matchAll(/^ ([A-Z][A-Z0-9]{2}):\d* "([^"]+)"/gm)) o[m[1]] = m[2];
+  } catch (e) { /* tags only */ } return o; })(),
 };
 fs.writeFileSync(path.join(packDir, "loans.json"), JSON.stringify(out));
 const capped = Object.values(buildings).filter((b) => typeof b.cap === "string").length;
