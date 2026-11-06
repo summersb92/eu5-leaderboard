@@ -6,12 +6,14 @@
 
    in:  {save: File}                                          -> "loaded"
         {type: "analyze", cid, mode, rate, term, budget}      -> "analysis"
+        {type: "finder", cids: [...]}                         -> "finder" (build-finder-model.js)
    out: {type: "log"|"stage"|"progress"|"loaded"|"analysis"|"error", ...} */
 "use strict";
-importScripts("worker.js", "rights-model.js", "loans-model.js");
-const R = self.EU5Rights, M = self.EU5Loans;
+importScripts("worker.js", "rights-model.js", "loans-model.js", "build-finder-model.js");
+const R = self.EU5Rights, M = self.EU5Loans, B = self.EU5Build;
 
 let S = null;   // the save's data
+let lastLoad = null; // what loadSave returned: date, save name, nations
 let D = null;   // rights.json from the pack
 let LD = null;  // loans.json from the pack
 let G = null;   // names and centres from proximity.json
@@ -67,7 +69,8 @@ async function loadSave(save) {
   stage("Reading buildings…");
   progress(0.62);
   const buildings = [];
-  for (const [a, b] of sections.get("building_manager")) buildings.push(...M.readBuildings(await readSpan(save, a, b)));
+  // one at a time: spreading tens of thousands into push() overflows a worker's stack
+  for (const [a, b] of sections.get("building_manager")) for (const x of M.readBuildings(await readSpan(save, a, b))) buildings.push(x);
 
   stage("Reading markets, loans and constructions…");
   progress(0.78);
@@ -91,7 +94,8 @@ async function loadSave(save) {
   }
   list.sort((a, b) => (!!b.player - !!a.player) || b.locations - a.locations);
   S = { locs, buildings, markets, prod, econ, loans, cons, researched, countries, names };
-  return { date, version, you, save: save.name, nations: list };
+  lastLoad = { date, version, you, save: save.name, nations: list };
+  return lastLoad;
 }
 
 const locName = (i) => (G.names[i] || "#" + i);
@@ -128,9 +132,31 @@ function analyze({ cid, mode, rate, term, budget }) {
   };
 }
 
+/* The build finder's data for these nations (build-finder.html, tools/build-finder.js). */
+function finder(cids) {
+  const bname = (k) => (D.buildings[k] && D.buildings[k].name) || k;
+  const gname = (k) => (D.goods[k] && D.goods[k].name) || k;
+  const label = (p) => (p.kind === "rgo" ? `Expand ${gname(p.type)} RGO` : `${p.kind === "new" ? "Build" : "Expand"} ${bname(p.type)}`);
+  const marketOf = (l) => { const L = S.locs.get(l), m = L && S.markets.get(L.market); return m ? locName(m.center) : "?"; };
+  const nations = [];
+  for (const cid of cids) {
+    const n = lastLoad.nations.find((x) => x.cid === cid);
+    if (!n) continue;
+    const res = M.analyzeCountry(D, LD, S, cid, { mode: "loan", rate: 0.035, term: 60, budget: 0 });
+    nations.push(B.nationData(res, { tag: n.tag, name: (LD.countryNames && LD.countryNames[n.tag]) || n.name, player: n.player && n.player !== "player" ? n.player : null,
+      locName, marketOf, label, interestTable: LD.interest || null, defines: LD.loans }));
+    log(`build finder: ${n.tag} ${nations[nations.length - 1].projects.length} projects`);
+  }
+  return { date: lastLoad.date, save: lastLoad.save, you: lastLoad.you, pack: lastLoad.pack ? lastLoad.pack.version : null, baseAge1: LD.prices.p_building_age_1_traditions, nations };
+}
+
 self.onmessage = async (e) => {
   const d = e.data;
   try {
+    if (d.type === "finder") {
+      postMessage({ type: "finder", data: finder(d.cids) });
+      return;
+    }
     if (d.type === "analyze") {
       postMessage({ type: "analysis", data: analyze(d) });
       return;

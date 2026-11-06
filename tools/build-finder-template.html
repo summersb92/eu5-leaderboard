@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>__TITLE__</title>
+<title>EU5 build finder</title>
 <style>
 :root {
   --bg: #f4f3ef; --surface: #fff; --ink: #1e2330; --muted: #5c6371; --line: #dad8d0;
@@ -58,6 +58,13 @@ pre { background: var(--surface); border: 1px solid var(--line); border-radius: 
 .answer .big .k { color: var(--muted); font-size: 12px; line-height: 1.2; max-width: 120px; }
 .answer .big .v { font: 700 24px var(--mono); color: var(--accent); }
 .answer .info { flex: 1 1 320px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-size: 12.5px; line-height: 1.35; }
+.loadbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 12px; padding: 8px 12px;
+  background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; }
+.loadbar.over { border-color: var(--accent); background: var(--tint); }
+.loadbar .drop { cursor: pointer; }
+.loadbar .drop u { color: var(--accent); }
+.loadbar progress { width: 160px; }
+.loadbar .err { color: var(--bad); }
 .topbar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin: 0 0 12px; }
 .topbar select { font-size: 15px; padding: 5px 8px; }
 button { font: inherit; padding: 5px 12px; border-radius: 5px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
@@ -67,7 +74,16 @@ button.ghost { background: transparent; color: var(--accent); }
 <body>
 <main>
 <p class="sub"><a href="./">&larr; Leaderboard</a> · <a href="loans.html">Loan &amp; build advisor</a> · <a href="placement.html">Capital finder</a></p>
-<h1>__TITLE__</h1>
+<h1 id="title">EU5 build finder</h1>
+<div class="loadbar" id="loadbar">
+  <label class="drop" id="drop" tabindex="0"><input type="file" id="saveinput" accept=".eu5" hidden>
+    <b>Load a save:</b> drop a <code>.eu5</code> here or <u>choose one</u></label>
+  <span class="i" data-tip="Write the save in debug mode, the same as for the leaderboard (compressed multiplayer autosaves can't be read). Usually in Documents\Paradox Interactive\Europa Universalis V\save games. It's read in this page: your save is never uploaded. Takes about a minute for a big save.">i</span>
+  <button class="ghost" id="usecurrent" hidden></button>
+  <span class="note" id="loadstatus"></span>
+  <progress id="loadprog" max="1" value="0" hidden></progress>
+</div>
+<div id="content">
 <p class="sub" id="sub"></p>
 <div class="topbar">
   <label>Nation <select id="nation"></select></label>
@@ -143,17 +159,93 @@ New buildings use the average profit per level of that building elsewhere in the
 <pre id="discord"></pre>
 
 <p class="note" id="foot"></p>
+</div>
 </main>
+<script src="js/saves.js"></script>
 <script>
-const DATA = __DATA__;
+let DATA = __DATA__;
 const $ = (id) => document.getElementById(id);
 const f = (v, d = 2) => (isFinite(v) ? v.toFixed(d) : "∞");
 const pct = (v, d = 0) => (v * 100).toFixed(d) + "%";
 const RANK = { rural_settlement: "rural", town: "town", city: "city" };
-let N = DATA.nations[0], SP = N.spend;
-DATA.nations.forEach((n, i) => $("nation").add(new Option(n.name + " (" + n.tag + ")" + (n.player ? " · " + n.player : ""), i)));
-$("foot").textContent = `Data: ${DATA.save}, game data ${DATA.pack}. Rebuild from a newer plaintext save: ` +
-  `node tools/build-finder.js "<save>" players build-finder.html  (or a tag list like MLO,BOH)`;
+let N = null, SP = null;
+const SHARED = typeof EU5Saves !== "undefined" ? EU5Saves : null;
+
+/* show DATA: nation list, title, the remembered nation first */
+function init() {
+  $("content").hidden = !DATA;
+  if (!DATA) return;
+  $("title").textContent = `EU5 build finder (${DATA.date})`;
+  document.title = $("title").textContent;
+  const sel = $("nation"); sel.length = 0;
+  DATA.nations.forEach((n, i) => sel.add(new Option(n.name + " (" + n.tag + ")" + (n.player ? " · " + n.player : ""), i)));
+  $("foot").textContent = `Data: ${DATA.save}, game data ${DATA.pack || "?"}. Load a newer save above, or build this page with the data in it: ` +
+    `node tools/build-finder.js "<save>" players build-finder.html`;
+  const want = SHARED && SHARED.nation();
+  const i = Math.max(0, DATA.nations.findIndex((n) => n.tag === want));
+  sel.value = i;
+  pickNation(i);
+  render();
+}
+
+// ---- loading a save: js/loans-worker.js reads it, then builds the finder data for the players
+let worker = null, loadT0 = 0, loadTimer = 0;
+function loadStatus(msg, cls) { $("loadstatus").textContent = msg; $("loadstatus").className = "note " + (cls || ""); }
+function openSave(file) {
+  if (!file) return;
+  if (worker) worker.terminate();
+  try { worker = new Worker("js/loans-worker.js"); }
+  catch (e) { loadStatus("Loading saves only works on the website (this copy is a local file).", "err"); return; }
+  $("loadprog").hidden = false; $("loadprog").value = 0;
+  loadT0 = performance.now(); clearInterval(loadTimer);
+  const tick = (msg) => loadStatus(`${msg} ${((performance.now() - loadT0) / 1000).toFixed(0)}s`);
+  let stage = "Reading " + file.name + "…"; tick(stage);
+  loadTimer = setInterval(() => tick(stage), 500);
+  const done = (msg, cls) => { clearInterval(loadTimer); $("loadprog").hidden = true; loadStatus(msg, cls); };
+  worker.onerror = (e) => done("The page's worker crashed: " + (e.message || "unknown error"), "err");
+  worker.onmessage = (e) => {
+    const m = e.data;
+    if (m.type === "stage") { stage = m.msg; tick(stage); }
+    else if (m.type === "progress") $("loadprog").value = m.value;
+    else if (m.type === "error") done("Couldn't read that save: " + m.message, "err");
+    else if (m.type === "loaded") {
+      const d = m.data, players = d.nations.filter((n) => n.player);
+      // the players, the saving player's nation and the one picked last on any page
+      const tags = new Set([...players.map((n) => n.tag), d.you, SHARED && SHARED.nation()].filter(Boolean));
+      const cids = d.nations.filter((n) => tags.has(n.tag)).map((n) => n.cid);
+      stage = `Working out ${cids.length} nation${cids.length === 1 ? "" : "s"}…`; tick(stage);
+      worker.postMessage({ type: "finder", cids });
+    } else if (m.type === "finder") {
+      const d = m.data;
+      const first = d.nations.find((x) => x.tag === d.you) || d.nations[0];
+      d.nations.sort((a, b) => (b === first) - (a === first) || a.name.localeCompare(b.name));
+      DATA = d;
+      done(`Loaded ${file.name} (${d.date}) · ${d.nations.length} nations · ${((performance.now() - loadT0) / 1000).toFixed(0)}s`);
+      init();
+    }
+  };
+  worker.postMessage({ save: file });
+  if (SHARED) SHARED.share(file).catch(() => {}); // every page follows the save opened here
+}
+$("saveinput").addEventListener("change", (e) => openSave(e.target.files[0]));
+const lb = $("loadbar");
+for (const ev of ["dragenter", "dragover"]) lb.addEventListener(ev, (e) => { e.preventDefault(); lb.classList.add("over"); });
+for (const ev of ["dragleave", "drop"]) lb.addEventListener(ev, () => lb.classList.remove("over"));
+lb.addEventListener("drop", (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openSave(f); });
+// the save another page made current: one click to use it here
+async function offerCurrent() {
+  if (!SHARED) return;
+  try {
+    const cur = await SHARED.current();
+    const b = $("usecurrent");
+    if (cur && cur.file && !(DATA && DATA.save === cur.name)) {
+      b.textContent = `Use the current save: ${cur.name}`; b.hidden = false;
+      b.onclick = () => { b.hidden = true; openSave(cur.file); };
+    } else b.hidden = true;
+  } catch (e) { /* no IndexedDB */ }
+}
+if (SHARED) SHARED.onShare(offerCurrent);
+offerCurrent();
 
 function pickNation(i) {
   N = DATA.nations[i]; SP = N.spend;
@@ -408,11 +500,10 @@ addEventListener("scroll", hideTip, { passive: true });
 
 $("copy").onclick = () => navigator.clipboard.writeText($("discord").textContent).then(() => { $("copy").textContent = "Copied"; setTimeout(() => ($("copy").textContent = "Copy"), 1200); });
 for (const el of document.querySelectorAll("input, select")) if (el.id !== "nation" && el.id !== "mode") el.addEventListener("input", render);
-$("nation").addEventListener("input", () => { pickNation(+$("nation").value); render(); });
+$("nation").addEventListener("input", () => { pickNation(+$("nation").value); render(); if (SHARED) SHARED.setNation(N.tag); });
 $("mode").addEventListener("input", () => { $("rate").value = (rateFor($("mode").value) * 100).toFixed(2); rateNote(); render(); });
 $("reset").addEventListener("click", () => { setDefaults(); render(); });
-pickNation(0);
-render();
+init();
 </script>
 </body>
 </html>

@@ -127,8 +127,28 @@
       stabilityInvestment: f("stability_investment"),
       // the game's own tax base (last entry of the yearly series); larger than the sum of location tax
       taxBaseGame: +(((chunk.match(/\n\thistorical_tax_base=\{([^}]*)\}/) || [])[1] || "").trim().split(/\s+/).pop() || 0),
-      // the whole country block, only when a tool asks for it (tools/build-finder.js reads interest modifiers from it)
-      raw: readEconomy.keepRaw ? chunk : undefined,
+      // what sets the nation's loan and bond interest (see js/build-finder-model.js interestOf)
+      interestIn: interestInputs(chunk),
+    };
+  }
+  /* The parts of a country block that carry bank/bond interest modifiers: researched advances,
+     implemented laws (policies), privileges and reforms, timed modifiers with their size, and the
+     societal values (-100..100). */
+  function interestInputs(chunk) {
+    const blk = (k) => {
+      const i = chunk.indexOf("\n\t\t" + k + "={"); if (i < 0) return "";
+      const j = chunk.indexOf("{", i);
+      for (let x = j, d = 0; x < chunk.length; x++) { if (chunk[x] === "{") d++; else if (chunk[x] === "}" && --d === 0) return chunk.slice(j, x); }
+      return "";
+    };
+    const objects = (k) => [...blk(k).matchAll(/object=(\w+)/g)].map((m) => m[1]);
+    const ra = (chunk.match(/\n\tresearched_advances=\{([^}]*)\}/) || [])[1] || "";
+    const tm = (chunk.match(/\n\ttimed_modifiers=\{[\s\S]*?\n\t\}/) || [""])[0];
+    return {
+      advances: [...ra.matchAll(/(\w+)=yes/g)].map((m) => m[1]),
+      policies: objects("implemented_laws"), privileges: objects("implemented_privileges"), reforms: objects("implemented_reforms"),
+      timed: [...tm.matchAll(/modifier=(\w+)[\s\S]*?size=(-?[\d.]+)/g)].map((m) => [m[1], +m[2]]),
+      societal: Object.fromEntries([...chunk.matchAll(/\n\t\t\t(\w+_vs_\w+)=(-?[\d.]+)/g)].map((m) => [m[1], +m[2]])),
     };
   }
 
